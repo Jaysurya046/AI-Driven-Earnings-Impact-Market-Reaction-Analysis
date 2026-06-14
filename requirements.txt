@@ -12,3 +12,17 @@ requests==2.31.0
 jupyter==1.0.0
 ipython==8.17.2
 plotly==5.17.0
+
+# Phase 1 - Streamlit and interactive analysis
+streamlit==1.28.0
+
+# Phase 3 - Advanced features (sentiment analysis, deep learning)
+textblob==0.17.1
+nltk==3.8.1
+tensorflow==2.15.0
+keras==2.15.0
+
+# API and automation
+fastapi==0.104.1
+uvicorn==0.24.0
+schedule==1.2.0
