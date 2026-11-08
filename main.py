@@ -186,6 +186,15 @@ class EarningsAnalysisPipeline:
             self.data_dir / 'model_comparison.csv',
             index=False
         )
+
+        # Save trained models with metadata
+        for model_name in self.model_trainer.models:
+            clean_name = model_name.lower().replace(' ', '_')
+            self.model_trainer.save_model(
+                model_name=model_name,
+                filepath=self.models_dir / f"{clean_name}.pkl",
+                feature_columns=feature_columns
+            )
         
         logger.info("\nModel Comparison Results:")
         logger.info(model_comparison.to_string())

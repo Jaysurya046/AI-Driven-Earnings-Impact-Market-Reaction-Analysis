@@ -12,10 +12,15 @@ from sklearn.metrics import (
     accuracy_score, precision_score, recall_score, f1_score,
     confusion_matrix, classification_report, roc_auc_score, roc_curve
 )
+import sklearn
 import xgboost as xgb
-from typing import Dict, Tuple, List
+from typing import Dict, Tuple, List, Optional, Union
 import logging
 import pickle
+import json
+import platform
+from datetime import datetime, timezone
+from pathlib import Path
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -28,6 +33,8 @@ class ModelTrainer:
         self.models = {}
         self.scalers = {}
         self.results = {}
+        self.feature_columns = {}
+        self.metadata = {}
     
     def train_logistic_regression(
         self,
@@ -257,42 +264,143 @@ class ModelTrainer:
         
         return comparison_df
     
-    def save_model(self, model_name: str, filepath: str) -> None:
+    def save_model(
+        self,
+        model_name: str,
+        filepath: Union[str, Path],
+        feature_columns: Optional[List[str]] = None,
+        metadata: Optional[Dict] = None
+    ) -> None:
         """
-        Save trained model to disk
+        Save trained model to disk along with metadata (feature columns, scalers, library versions)
         
         Args:
             model_name: Name of model to save
-            filepath: Path to save file
+            filepath: Path to save file (.pkl)
+            feature_columns: List of feature column names used during training
+            metadata: Optional additional metadata dict
         """
         if model_name not in self.models:
             logger.error(f"Model {model_name} not found")
             return
         
+        path = Path(filepath)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        
+        cols = feature_columns or self.feature_columns.get(model_name)
+        if cols is None and hasattr(self, '_global_feature_columns'):
+            cols = self._global_feature_columns
+
+        metrics = self.results.get(model_name, {})
+        # Serialize only JSON-compatible metrics
+        clean_metrics = {}
+        for k, v in metrics.items():
+            if isinstance(v, (int, float, str, bool)):
+                clean_metrics[k] = v
+            elif isinstance(v, (np.floating, np.integer)):
+                clean_metrics[k] = float(v)
+
+        library_versions = {
+            'scikit-learn': sklearn.__version__,
+            'xgboost': xgb.__version__,
+            'pandas': pd.__version__,
+            'numpy': np.__version__,
+            'python': platform.python_version()
+        }
+
+        model_data = {
+            'model': self.models[model_name],
+            'scaler': self.scalers.get(model_name),
+            'feature_columns': cols,
+            'model_name': model_name,
+            'metrics': clean_metrics,
+            'library_versions': library_versions,
+            'created_at': datetime.now(timezone.utc).isoformat(),
+            'extra_metadata': metadata or {}
+        }
+        
         try:
-            model_data = {
-                'model': self.models[model_name],
-                'scaler': self.scalers[model_name]
-            }
-            with open(filepath, 'wb') as f:
+            with open(path, 'wb') as f:
                 pickle.dump(model_data, f)
-            logger.info(f"Model saved to {filepath}")
+            logger.info(f"Model saved to {path}")
+
+            # Save readable JSON metadata sidecar
+            json_meta_path = path.with_suffix('.json')
+            meta_json = {
+                'model_name': model_name,
+                'model_class': type(self.models[model_name]).__name__,
+                'has_scaler': self.scalers.get(model_name) is not None,
+                'scaler_class': type(self.scalers.get(model_name)).__name__ if self.scalers.get(model_name) is not None else None,
+                'feature_columns': cols,
+                'metrics': clean_metrics,
+                'library_versions': library_versions,
+                'created_at': model_data['created_at'],
+                'extra_metadata': metadata or {}
+            }
+            with open(json_meta_path, 'w') as jf:
+                json.dump(meta_json, jf, indent=2)
+            logger.info(f"Model metadata saved to {json_meta_path}")
+
         except Exception as e:
             logger.error(f"Error saving model: {str(e)}")
-    
-    def load_model(self, filepath: str, model_name: str) -> None:
+
+    def load_model(self, filepath: Union[str, Path], model_name: str) -> Dict:
         """
-        Load model from disk
+        Load model from disk and restore model, scaler, and metadata
         
         Args:
-            filepath: Path to model file
+            filepath: Path to model file (.pkl)
             model_name: Name to assign to loaded model
+            
+        Returns:
+            Dictionary containing loaded model data
         """
+        path = Path(filepath)
         try:
-            with open(filepath, 'rb') as f:
+            with open(path, 'rb') as f:
                 model_data = pickle.load(f)
+            
             self.models[model_name] = model_data['model']
-            self.scalers[model_name] = model_data['scaler']
-            logger.info(f"Model loaded from {filepath}")
+            self.scalers[model_name] = model_data.get('scaler')
+            self.feature_columns[model_name] = model_data.get('feature_columns')
+            self.metadata[model_name] = model_data
+            
+            logger.info(f"Model {model_name} loaded from {path}")
+            return model_data
         except Exception as e:
             logger.error(f"Error loading model: {str(e)}")
+            raise
+
+    def predict(self, model_name: str, X: Union[pd.DataFrame, np.ndarray]) -> np.ndarray:
+        """
+        Make predictions using a loaded model, automatically applying feature alignment and scaling.
+        
+        Args:
+            model_name: Name of model to use
+            X: Input features (DataFrame with feature columns or ndarray)
+            
+        Returns:
+            Numpy array of predictions
+        """
+        if model_name not in self.models:
+            raise ValueError(f"Model '{model_name}' has not been trained or loaded.")
+            
+        model = self.models[model_name]
+        scaler = self.scalers.get(model_name)
+        
+        if isinstance(X, pd.DataFrame):
+            expected_cols = self.feature_columns.get(model_name)
+            if expected_cols:
+                missing = [c for c in expected_cols if c not in X.columns]
+                if missing:
+                    raise ValueError(f"Input DataFrame is missing required features: {missing}")
+                X_vals = X[expected_cols].values
+            else:
+                X_vals = X.values
+        else:
+            X_vals = np.asarray(X)
+            
+        if scaler is not None:
+            X_vals = scaler.transform(X_vals)
+            
+        return model.predict(X_vals)
