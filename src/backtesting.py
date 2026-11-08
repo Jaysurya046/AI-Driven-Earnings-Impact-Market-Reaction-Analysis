@@ -14,16 +14,29 @@ logger = logging.getLogger(__name__)
 
 
 class Backtester:
-    """Backtests trading strategies based on earnings announcements"""
+    """Backtests trading strategies based on earnings announcements with realistic execution modeling"""
     
-    def __init__(self, initial_capital: float = 100000.0):
+    def __init__(
+        self,
+        initial_capital: float = 100000.0,
+        commission_rate: float = 0.001,
+        slippage_bps: float = 5.0,
+        next_day_execution: bool = True
+    ):
         """
-        Initialize backtester
+        Initialize backtester with transaction costs and execution delay modeling.
         
         Args:
             initial_capital: Starting capital for backtesting
+            commission_rate: Broker commission fraction per side (default: 0.1% = 0.001)
+            slippage_bps: Market impact / slippage in basis points per side (default: 5 bps)
+            next_day_execution: Whether trades execute next business day after announcement
         """
         self.initial_capital = initial_capital
+        self.commission_rate = commission_rate
+        self.slippage_bps = slippage_bps
+        self.next_day_execution = next_day_execution
+        
         self.capital = initial_capital
         self.positions = {}
         self.trades = []
@@ -88,25 +101,50 @@ class Backtester:
                     invest_amount = self.capital * position_size
                     
                     # Simulate return over holding period
-                    # Use actual post-event return if available
                     if 'PostEventReturn' in row:
-                        # Approximate return over holding period
                         daily_return = row['PostEventReturn'] / 5  # Assume 5-day window
                         total_return = daily_return * min(holding_period, 5)
                     else:
                         total_return = 0
                     
-                    profit_loss = invest_amount * (total_return / 100) * signal
+                    # Next-day execution timing
+                    dt_earnings = pd.to_datetime(earnings_date)
+                    if self.next_day_execution:
+                        entry_date = dt_earnings + pd.tseries.offsets.BDay(1)
+                        exit_date = entry_date + pd.tseries.offsets.BDay(holding_period)
+                        timing_str = 'next_day_open'
+                    else:
+                        entry_date = dt_earnings
+                        exit_date = dt_earnings + pd.Timedelta(days=holding_period)
+                        timing_str = 'same_day_close'
+
+                    gross_return_pct = total_return * signal
+                    gross_profit_loss = invest_amount * (gross_return_pct / 100.0)
+
+                    # Realistic transaction costs: slippage + commission on entry and exit
+                    slippage_cost = invest_amount * (2.0 * self.slippage_bps / 10000.0)
+                    commission_cost = invest_amount * (2.0 * self.commission_rate)
+                    total_costs = slippage_cost + commission_cost
+
+                    profit_loss = gross_profit_loss - total_costs
+                    net_return_pct = (profit_loss / invest_amount) * 100.0 if invest_amount > 0 else 0.0
                     
                     # Record trade
                     trade = {
                         'Ticker': ticker,
-                        'EntryDate': earnings_date,
-                        'ExitDate': earnings_date + pd.Timedelta(days=holding_period),
+                        'EarningsDate': earnings_date,
+                        'EntryDate': entry_date,
+                        'ExitDate': exit_date,
+                        'ExecutionTiming': timing_str,
                         'Signal': 'LONG' if signal > 0 else 'SHORT',
                         'Surprise': surprise,
                         'Invested': invest_amount,
-                        'Return': total_return,
+                        'GrossReturn': gross_return_pct,
+                        'NetReturn': net_return_pct,
+                        'Return': net_return_pct,
+                        'GrossProfitLoss': gross_profit_loss,
+                        'SlippageCost': slippage_cost,
+                        'CommissionCost': commission_cost,
                         'ProfitLoss': profit_loss
                     }
                     trades.append(trade)
@@ -116,7 +154,7 @@ class Backtester:
                     
                     # Update portfolio value
                     portfolio_value.append(self.capital)
-                    dates.append(earnings_date)
+                    dates.append(entry_date)
         
         # Sort by date
         if trades:
@@ -170,6 +208,13 @@ class Backtester:
             'winning_trades': int((trades_df['ProfitLoss'] > 0).sum()) if len(trades_df) > 0 else 0,
             'losing_trades': int((trades_df['ProfitLoss'] < 0).sum()) if len(trades_df) > 0 else 0,
             'avg_trade_return': trades_df['Return'].mean() if len(trades_df) > 0 else 0,
+            'total_slippage_cost': float(trades_df['SlippageCost'].sum()) if len(trades_df) > 0 else 0.0,
+            'total_commission_cost': float(trades_df['CommissionCost'].sum()) if len(trades_df) > 0 else 0.0,
+            'gross_profit_loss': float(trades_df['GrossProfitLoss'].sum()) if len(trades_df) > 0 else 0.0,
+            'net_profit_loss': float(trades_df['ProfitLoss'].sum()) if len(trades_df) > 0 else 0.0,
+            'commission_rate': self.commission_rate,
+            'slippage_bps': self.slippage_bps,
+            'next_day_execution': self.next_day_execution,
             'portfolio_value': portfolio_value,
             'dates': dates if dates else [datetime.now()],
             'trades': trades
@@ -189,7 +234,7 @@ class Backtester:
         position_size: float = 0.1
     ) -> Dict:
         """
-        Mean reversion strategy: Bet against extreme surprises
+        Mean reversion strategy: Bet against extreme surprises with transaction costs and next-day timing
         
         Args:
             event_analysis: DataFrame with earnings events
@@ -234,25 +279,51 @@ class Backtester:
                     else:
                         total_return = 0
                     
-                    # In mean reversion, we bet against the initial move
-                    profit_loss = invest_amount * (-total_return / 100) * np.sign(signal)
-                    
+                    # Next-day execution timing
+                    dt_earnings = pd.to_datetime(earnings_date)
+                    if self.next_day_execution:
+                        entry_date = dt_earnings + pd.tseries.offsets.BDay(1)
+                        exit_date = entry_date + pd.tseries.offsets.BDay(holding_period)
+                        timing_str = 'next_day_open'
+                    else:
+                        entry_date = dt_earnings
+                        exit_date = dt_earnings + pd.Timedelta(days=holding_period)
+                        timing_str = 'same_day_close'
+
+                    # In mean reversion, bet against initial move
+                    gross_return_pct = -total_return * np.sign(signal)
+                    gross_profit_loss = invest_amount * (gross_return_pct / 100.0)
+
+                    slippage_cost = invest_amount * (2.0 * self.slippage_bps / 10000.0)
+                    commission_cost = invest_amount * (2.0 * self.commission_rate)
+                    total_costs = slippage_cost + commission_cost
+
+                    profit_loss = gross_profit_loss - total_costs
+                    net_return_pct = (profit_loss / invest_amount) * 100.0 if invest_amount > 0 else 0.0
+
                     trade = {
                         'Ticker': ticker,
-                        'EntryDate': earnings_date,
-                        'ExitDate': earnings_date + pd.Timedelta(days=holding_period),
+                        'EarningsDate': earnings_date,
+                        'EntryDate': entry_date,
+                        'ExitDate': exit_date,
+                        'ExecutionTiming': timing_str,
                         'Signal': 'LONG' if signal > 0 else 'SHORT',
                         'Strategy': 'Mean Reversion',
                         'Surprise': surprise,
                         'Invested': invest_amount,
-                        'Return': -total_return if signal != 0 else 0,
+                        'GrossReturn': gross_return_pct,
+                        'NetReturn': net_return_pct,
+                        'Return': net_return_pct,
+                        'GrossProfitLoss': gross_profit_loss,
+                        'SlippageCost': slippage_cost,
+                        'CommissionCost': commission_cost,
                         'ProfitLoss': profit_loss
                     }
                     trades.append(trade)
                     
                     self.capital += profit_loss
                     portfolio_value.append(self.capital)
-                    dates.append(earnings_date)
+                    dates.append(entry_date)
         
         if trades:
             trades_df = pd.DataFrame(trades)
@@ -260,7 +331,7 @@ class Backtester:
         else:
             trades_df = pd.DataFrame()
         
-        # Calculate metrics (same as momentum strategy)
+        # Calculate metrics
         portfolio_array = np.array(portfolio_value)
         if len(portfolio_array) > 1:
             returns = np.diff(portfolio_array) / portfolio_array[:-1]
@@ -301,6 +372,13 @@ class Backtester:
             'winning_trades': int((trades_df['ProfitLoss'] > 0).sum()) if len(trades_df) > 0 else 0,
             'losing_trades': int((trades_df['ProfitLoss'] < 0).sum()) if len(trades_df) > 0 else 0,
             'avg_trade_return': trades_df['Return'].mean() if len(trades_df) > 0 else 0,
+            'total_slippage_cost': float(trades_df['SlippageCost'].sum()) if len(trades_df) > 0 else 0.0,
+            'total_commission_cost': float(trades_df['CommissionCost'].sum()) if len(trades_df) > 0 else 0.0,
+            'gross_profit_loss': float(trades_df['GrossProfitLoss'].sum()) if len(trades_df) > 0 else 0.0,
+            'net_profit_loss': float(trades_df['ProfitLoss'].sum()) if len(trades_df) > 0 else 0.0,
+            'commission_rate': self.commission_rate,
+            'slippage_bps': self.slippage_bps,
+            'next_day_execution': self.next_day_execution,
             'portfolio_value': portfolio_value,
             'dates': dates if dates else [datetime.now()],
             'trades': trades
