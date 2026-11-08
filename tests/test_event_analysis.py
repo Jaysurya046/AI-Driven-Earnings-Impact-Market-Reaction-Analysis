@@ -41,10 +41,9 @@ def test_post_return_includes_event_day_reaction():
     earnings_date = df["Date"].iloc[t0_idx]
 
     result = analyzer.analyze_event_window(df, earnings_date, "AAA")
-    # Series rises exactly 1% per trading day. Post window = event day + 5
-    # following days = 6 returns of 1% (event-day move is the market's first
-    # reaction to the announcement); pre window = 5 returns.
-    assert result['PostEventReturn'] == pytest.approx(6.0, abs=1e-9)
+    # Series rises exactly 1% per trading day. Post window has ew returns
+    # (starting with the event-day reaction); pre window has ew returns.
+    assert result['PostEventReturn'] == pytest.approx(5.0, abs=1e-9)
     assert result['PreEventReturn'] == pytest.approx(5.0, abs=1e-9)
 
 
