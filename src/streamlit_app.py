@@ -185,12 +185,8 @@ def run_analysis(config: Dict) -> Dict:
         
         # Step 4: Model Training
         status_text.text("🤖 Training ML models...")
-        feature_columns = [col for col in features.columns if col not in 
-                          ['Ticker', 'EarningsDate', 'PostEventReturn', 'PreEventReturn', 
-                           'EPS', 'SurprisePercentage', 'DataPointsInWindow', 'DataPointsInEstimation']]
-        
-        X_train, X_test, y_train, y_test = engineer.prepare_train_test_data(
-            features, labels, feature_columns=feature_columns, test_size=0.2, random_state=42
+        X_train, X_test, y_train, y_test, feature_columns = engineer.prepare_train_test_data(
+            features, labels, test_size=0.2, random_state=42, chronological=True
         )
         
         trainer = ModelTrainer()
