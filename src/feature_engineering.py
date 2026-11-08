@@ -5,7 +5,7 @@ Creates ML features from event analysis results
 
 import pandas as pd
 import numpy as np
-from typing import List, Optional, Tuple
+from typing import List, Optional, Tuple, Union
 import logging
 
 logging.basicConfig(level=logging.INFO)
@@ -36,31 +36,61 @@ METADATA_COLUMNS = [
 # Backwards-compatible alias used by older call sites
 NON_FEATURE_COLUMNS = LEAKY_COLUMNS + METADATA_COLUMNS
 
+# Centralized explicit list of safe pre-announcement feature column names
+SAFE_FEATURE_COLUMNS = [
+    'SurprisePercentage',
+    'PreEventReturn',
+    'PreEventVolatility',
+    'EstimationVolatility',
+    'PreEventAvgVolume',
+    'EstimationAvgVolume',
+    'EarningsSurpriseAbs',
+    'EarningsSurpriseDirection',
+    'PreVsEstimationVolatilityRatio',
+    'PreEventVolumeRatio',
+    'PreEventMomentum',
+    'SurpriseVolatilityInteraction',
+    'SufficientDataPoints',
+]
+
 
 class FeatureEngineer:
     """Creates machine learning features from earnings event data"""
 
     @staticmethod
-    def get_feature_columns(features_df: pd.DataFrame) -> List[str]:
+    def get_feature_columns(features_df: Optional[pd.DataFrame] = None) -> List[str]:
         """
-        Return the numeric columns that are safe to use as model inputs.
+        Return the explicit numeric columns that are safe to use as model inputs.
 
         Single source of truth: excludes identifiers/metadata and any column
         derived from post-announcement data (see LEAKY_COLUMNS), plus the
         label column if present.
 
         Args:
-            features_df: DataFrame produced by create_features()
+            features_df: Optional DataFrame produced by create_features().
+                         If provided, returns only safe features present in the DataFrame.
+                         If None, returns the canonical SAFE_FEATURE_COLUMNS list.
 
         Returns:
             Ordered list of feature column names
         """
-        excluded = set(NON_FEATURE_COLUMNS) | {'Label'}
-        numeric_cols = features_df.select_dtypes(include=[np.number]).columns.tolist()
-        return [col for col in numeric_cols if col not in excluded]
+        if features_df is None:
+            return list(SAFE_FEATURE_COLUMNS)
 
-    @staticmethod
-    def create_features(event_analysis_df: pd.DataFrame) -> pd.DataFrame:
+        excluded = set(NON_FEATURE_COLUMNS) | {'Label'}
+        cols = [c for c in SAFE_FEATURE_COLUMNS if c in features_df.columns]
+        extra_numeric = [
+            col for col in features_df.select_dtypes(include=[np.number]).columns
+            if col not in excluded and col not in cols
+        ]
+        return cols + extra_numeric
+
+    @classmethod
+    def create_features(
+        cls,
+        event_analysis_df: pd.DataFrame,
+        return_feature_names: bool = False
+    ) -> Union[pd.DataFrame, Tuple[pd.DataFrame, List[str]]]:
         """
         Create feature set for ML models.
 
@@ -71,9 +101,10 @@ class FeatureEngineer:
 
         Args:
             event_analysis_df: DataFrame from EventAnalyzer.analyze_multiple_events()
+            return_feature_names: If True, returns (features_df, feature_columns) tuple.
 
         Returns:
-            DataFrame with engineered features
+            DataFrame with engineered features (or tuple if return_feature_names=True)
         """
         df = event_analysis_df.copy()
 
@@ -113,6 +144,11 @@ class FeatureEngineer:
         # 7. Data Quality
         df['SufficientDataPoints'] = (df['DataPointsInWindow'] >= 8).astype(int)
 
+        feature_cols = cls.get_feature_columns(df)
+        df.attrs['feature_columns'] = feature_cols
+
+        if return_feature_names:
+            return df, feature_cols
         return df
     
     @staticmethod
