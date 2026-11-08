@@ -88,23 +88,33 @@ class AppConfig:
 
 def load_config(
     config_file: Optional[Union[str, Path]] = None,
+    env_file: Optional[Union[str, Path]] = None,
     env_prefix: str = "APP_"
 ) -> AppConfig:
     """
     Load configuration by merging config.ini, environment variables, and defaults.
 
     Order of precedence:
-    1. Environment variables (highest priority)
+    1. Environment variables (highest priority, loaded via python-dotenv if .env exists)
     2. config.ini settings
     3. Default fallback values (lowest priority)
 
     Args:
         config_file: Path to config.ini. If None, searches standard locations.
+        env_file: Optional path to .env file to load.
         env_prefix: Optional prefix for environment variables (e.g., APP_LOOKBACK_YEARS).
 
     Returns:
         AppConfig object with merged configuration.
     """
+    # Load custom env_file if provided
+    if env_file is not None and Path(env_file).is_file():
+        try:
+            from dotenv import load_dotenv
+            load_dotenv(dotenv_path=env_file, override=True)
+        except ImportError:
+            pass
+
     # 1. Start with defaults
     cfg: Dict[str, Any] = dict(DEFAULT_CONFIG)
 
@@ -189,6 +199,7 @@ def load_config(
         'LABEL_THRESHOLD': ('label_threshold', float),
         'TEST_SIZE': ('test_size', float),
         'RANDOM_STATE': ('random_state', int),
+        'MODELS_TO_TRAIN': ('models_to_train', _parse_list),
         'DATA_DIR': ('data_dir', str),
         'MODELS_DIR': ('models_dir', str),
         'VIZ_DIR': ('viz_dir', str),
