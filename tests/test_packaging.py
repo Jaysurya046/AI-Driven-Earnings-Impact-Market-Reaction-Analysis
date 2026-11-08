@@ -4,10 +4,14 @@ Unit tests for standardized packaging and exports
 
 import sys
 from pathlib import Path
-import tomllib
 import pytest
 
 import src
+
+if sys.version_info >= (3, 11):
+    import tomllib
+else:
+    import tomli as tomllib
 
 
 def test_src_package_metadata():
