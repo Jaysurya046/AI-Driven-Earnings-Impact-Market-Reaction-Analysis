@@ -169,8 +169,8 @@ def create_performance_report(
     if probabilities is not None:
         try:
             report['auc_roc'] = roc_auc_score(actual, probabilities)
-        except:
-            pass
+        except (ValueError, TypeError) as e:
+            logger.warning(f"Could not calculate AUC-ROC in report: {e}")
     
     return report
 

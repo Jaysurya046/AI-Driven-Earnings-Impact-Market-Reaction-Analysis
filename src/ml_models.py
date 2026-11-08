@@ -192,8 +192,8 @@ class ModelTrainer:
                 roc_auc = roc_auc_score(y_test, y_pred_proba)
                 results['AUC-ROC'] = roc_auc
                 results['PredictionProbabilities'] = y_pred_proba
-            except:
-                logger.warning(f"Could not calculate AUC-ROC for {model_name}")
+            except (ValueError, TypeError) as e:
+                logger.warning(f"Could not calculate AUC-ROC for {model_name}: {e}")
         
         logger.info(f"\n{model_name} Results:")
         logger.info(f"  Accuracy:  {accuracy:.4f}")

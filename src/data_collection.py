@@ -292,6 +292,68 @@ class DataCollector:
         
         return price_df, earnings_df
     
+    @staticmethod
+    def validate_collected_data(
+        price_df: pd.DataFrame,
+        earnings_df: pd.DataFrame,
+        min_price_records: int = 10,
+        min_earnings_records: int = 1
+    ) -> None:
+        """
+        Validate data shapes and required columns immediately after collection.
+
+        Args:
+            price_df: Historical stock prices DataFrame
+            earnings_df: Earnings dates and surprise data DataFrame
+            min_price_records: Minimum price records expected
+            min_earnings_records: Minimum earnings records expected
+
+        Raises:
+            ValueError: If either DataFrame is empty, below threshold, or missing required columns.
+        """
+        if price_df is None or price_df.empty:
+            raise ValueError("Price data collection failed: DataFrame is empty or None.")
+
+        if len(price_df) < min_price_records:
+            raise ValueError(
+                f"Insufficient price data collected: got {len(price_df)} rows, "
+                f"expected at least {min_price_records}."
+            )
+
+        required_price_cols = {'Date', 'Ticker', 'Adj Close', 'Volume'}
+        missing_price = required_price_cols - set(price_df.columns)
+        if missing_price:
+            raise ValueError(f"Price DataFrame is missing required columns: {missing_price}")
+
+        if earnings_df is None or earnings_df.empty:
+            raise ValueError("Earnings data collection failed: DataFrame is empty or None.")
+
+        if len(earnings_df) < min_earnings_records:
+            raise ValueError(
+                f"Insufficient earnings data collected: got {len(earnings_df)} rows, "
+                f"expected at least {min_earnings_records}."
+            )
+
+        required_earnings_cols = {'Date', 'Ticker'}
+        missing_earnings = required_earnings_cols - set(earnings_df.columns)
+        if missing_earnings:
+            raise ValueError(f"Earnings DataFrame is missing required columns: {missing_earnings}")
+
+        # Check for ticker overlap
+        price_tickers = set(price_df['Ticker'].unique())
+        earnings_tickers = set(earnings_df['Ticker'].unique())
+        overlap = price_tickers & earnings_tickers
+        if not overlap:
+            raise ValueError(
+                f"No ticker overlap between price data ({price_tickers}) and "
+                f"earnings data ({earnings_tickers})."
+            )
+
+        logger.info(
+            f"Data validation passed: {len(price_df)} price rows, "
+            f"{len(earnings_df)} earnings records across {len(overlap)} matching tickers."
+        )
+
     def save_to_csv(self, df: pd.DataFrame, filepath: str) -> None:
         """
         Save DataFrame to CSV file

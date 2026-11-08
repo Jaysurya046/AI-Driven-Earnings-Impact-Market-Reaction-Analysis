@@ -75,6 +75,9 @@ class EarningsAnalysisPipeline:
         
         self.price_data, self.earnings_data = self.data_collector.fetch_multiple_stocks(tickers)
         
+        # Validate data shapes and schema immediately after collection
+        self.data_collector.validate_collected_data(self.price_data, self.earnings_data)
+        
         # Save raw data
         self.data_collector.save_to_csv(
             self.price_data,
