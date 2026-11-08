@@ -153,13 +153,14 @@ class FeatureEngineer:
     def get_feature_importance_df(model, feature_columns) -> DataFrame
 ```
 
-**Features Created**:
+**Features Created (Strict Pre-Announcement Integrity)**:
 
 1. **Surprise Features**:
    - EarningsSurpriseAbs: |Reported EPS - Expected EPS|
    - EarningsSurpriseDirection: Sign(Surprise)
 
 2. **Volatility Features**:
+   - PreEventVolatility: Historical volatility prior to announcement
    - VolatilityChangeRatio: PostVol / EstimationVol
    - VolatilityIncrease: PostVol - EstimationVol
 
@@ -168,12 +169,14 @@ class FeatureEngineer:
    - VolumeAnomalous: 1 if Ratio > 1.5, else 0
 
 4. **Momentum Features**:
-   - PreEventMomentum: Pre-event return
-   - PostEventMomentum: Post-event return
+   - PreEventMomentum: Pre-event historical return
+   - PriceTrend_20D: Short-term historical momentum prior to announcement
 
-5. **Derived Features**:
-   - PreVol_PostReturn: PreVol × Sign(PostReturn)
+5. **Safe Interaction Features**:
    - SurpriseVolatilityInteraction: Surprise × VolRatio
+   - PreEventVol_SurpriseInteraction: Pre-event Volatility × EPS Surprise
+
+> **Note on Data Leakage Prevention**: Features derived from post-announcement prices/returns (such as `PostEventMomentum` or `PreVol_PostReturn`) are strictly prohibited and stripped out via `SAFE_FEATURE_COLUMNS` and `LEAKY_COLUMNS` to ensure realistic, uncompromised model evaluation.
 
 **Label Creation**:
 ```python
@@ -183,31 +186,33 @@ else:
     Label = 0  # Negative reaction
 ```
 
-**Train-Test Split**:
+**Train-Test Split (Chronological Order)**:
 ```
-All Events (N)
+All Events (N, sorted by Date ascending)
    |
-   +---> Training Set (80%)
+   +---> Training Set (Earliest 80%) [No look-ahead bias]
    |
-   +---> Test Set (20%)
+   +---> Test Set (Latest 20%)
 ```
 
 ---
 
 ### 4. ML Models Module (`ml_models.py`)
 
-**Purpose**: Train and evaluate classification models
+**Purpose**: Train, tune, calibrate, and evaluate classification models with metadata persistence
 
-**Key Classes**:
+**Key Classes & Capabilities**:
 ```python
 class ModelTrainer:
     def train_logistic_regression(X_train, y_train) -> Tuple[Model, Scaler]
     def train_random_forest(X_train, y_train) -> Model
-    def train_xgboost(X_train, y_train) -> Tuple[Model, Scaler]
+    def train_xgboost(X_train, y_train, scale_features=False) -> Tuple[Model, Optional[Scaler]]
     def evaluate_model(model, X_test, y_test, scaler, model_name) -> Dict
-    def train_all_models(X_train, X_test, y_train, y_test) -> DataFrame
-    def save_model(model_name, filepath) -> None
-    def load_model(filepath, model_name) -> None
+    def evaluate_cv(model, X, y, cv=5) -> Dict  # Cross-validation with 95% CI
+    def tune_hyperparameters(model_name, X_train, y_train, cv=3) -> Tuple[Model, Dict]
+    def calibrate_probabilities(model, X_val, y_val, scaler) -> CalibratedClassifierCV
+    def save_model(model_name, filepath, feature_columns=None, metadata=None) -> None  # Saves .pkl and companion .json
+    def load_model(filepath, model_name) -> Dict  # Loads model and associated metadata
 ```
 
 **Models**:

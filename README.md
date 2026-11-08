@@ -15,51 +15,47 @@ This system:
 ## Project Structure
 
 ```
-├── src/                          # Core analysis modules
-│   ├── data_collection.py       # Yahoo Finance data fetching
-│   ├── event_analysis.py        # Event-window analysis
-│   ├── feature_engineering.py   # ML feature creation
-│   ├── ml_models.py             # Model training and evaluation
-│   └── visualizations.py        # Charts and dashboards
+├── .github/workflows/
+│   └── ci.yml                   # Automated CI workflow (linting, typing, pytest)
+├── src/                          # Standardized core package
+│   ├── __init__.py              # Package init and unified exports
+│   ├── config.py                # Unified config loader (config.ini + .env)
+│   ├── data_collection.py       # Yahoo Finance ingestion with retry & validation
+│   ├── event_analysis.py        # Trading-day event study & CAR calculation
+│   ├── feature_engineering.py   # Strict pre-announcement feature creation
+│   ├── ml_models.py             # Classification, CV, tuning & calibration
+│   ├── backtesting.py           # Realistic backtesting (slippage & commission)
+│   ├── sector_comparison.py     # Sector-level impact analysis
+│   ├── sentiment_analysis.py    # News sentiment extraction around earnings
+│   ├── streamlit_app.py         # Interactive multi-tab web dashboard
+│   ├── utils.py                 # Modern pandas utilities & helper functions
+│   └── visualizations.py        # Chart generation and reporting
 │
-├── data/                         # Data storage
-│   ├── raw_price_data.csv
-│   ├── raw_earnings_data.csv
-│   ├── event_analysis.csv
-│   ├── engineered_features.csv
-│   ├── model_comparison.csv
-│   └── final_report.txt
+├── tests/                        # Comprehensive test suite (unit & integration)
+├── data/                         # Cached market data and analysis outputs
+├── models/                       # Model artifacts (.pkl) and companion metadata (.json)
+├── visualizations/               # Generated analytical figures
+├── notebooks/                    # Interactive research notebooks
 │
-├── models/                       # Trained model storage
-│   ├── logistic_regression.pkl
-│   ├── random_forest.pkl
-│   └── xgboost.pkl
-│
-├── visualizations/               # Generated charts
-│   ├── 01_surprise_vs_reaction.png
-│   ├── 02_model_comparison.png
-│   ├── 03_volatility_analysis.png
-│   ├── 04_volume_analysis.png
-│   └── 05_feature_importance.png
-│
-├── notebooks/                    # Jupyter notebooks for exploration
-│
-├── main.py                       # Main analysis pipeline
-├── quick_start.py               # Quick start example
-├── config.ini                   # Configuration file
-├── requirements.txt             # Python dependencies
-└── README.md                    # This file
+├── api_server.py                 # Thread-safe FastAPI server with async workers
+├── main.py                       # Orchestrated in-memory analysis pipeline
+├── retraining_scheduler.py       # Scheduled retraining daemon
+├── pyproject.toml                # PEP 517/621 packaging & test config
+├── config.ini                    # Core configuration file
+├── requirements.txt              # Primary project dependencies
+├── requirements-lock.txt         # Pinned reproducible dependency lockfile
+└── README.md                     # Project documentation
 ```
 
 ## Installation
 
 ### Prerequisites
-- Python 3.8+
+- Python 3.9+ (Python 3.10–3.13 supported)
 - pip package manager
 
 ### Setup
 
-1. **Clone/Download the project**
+1. **Clone the repository**
    ```bash
    cd "AI-Driven Earnings Impact & Market Reaction Analysis"
    ```
@@ -75,9 +71,18 @@ This system:
    source venv/bin/activate
    ```
 
-3. **Install dependencies**
+3. **Install package & dependencies**
    ```bash
+   # Standard install
    pip install -r requirements.txt
+
+   # Editable package installation with dev tools
+   pip install -e ".[dev]"
+   ```
+
+4. **Run Automated Test Suite**
+   ```bash
+   python -m pytest
    ```
 
 ## Quick Start

@@ -1,0 +1,28 @@
+# Locked production dependencies for AI-Driven Earnings Impact & Market Reaction Analysis
+# Generated for reproducible builds across environments
+pandas==2.2.3
+numpy==1.26.4
+yfinance==0.2.54
+scikit-learn==1.4.2
+xgboost==2.0.3
+matplotlib==3.8.4
+seaborn==0.13.2
+scipy==1.13.1
+sqlalchemy==2.0.30
+python-dotenv==1.0.1
+requests==2.32.3
+fastapi==0.111.0
+uvicorn==0.30.1
+pydantic==2.7.4
+textblob==0.18.0.post0
+nltk==3.8.1
+schedule==1.2.1
+
+# Optional & Development dependencies
+streamlit==1.35.0
+plotly==5.22.0
+pytest==8.2.2
+pytest-asyncio==0.23.7
+httpx==0.27.0
+ruff==0.4.8
+mypy==1.10.0
