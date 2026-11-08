@@ -100,3 +100,40 @@ def test_clean_earnings_dataframe_filters_future_and_nan_dates():
     assert 'EPS' in cleaned.columns
     assert 'Ticker' in cleaned.columns
 
+
+def test_parallel_fetch_multiple_stocks(monkeypatch):
+    """Verify fetch_multiple_stocks runs concurrently across worker threads and preserves ordering"""
+    collector = DataCollector(max_workers=3)
+    tickers = ["AAPL", "MSFT", "GOOGL", "AMZN"]
+
+    def _mock_price(ticker):
+        return pd.DataFrame({
+            'Date': [pd.Timestamp('2023-01-01')],
+            'Open': [100.0], 'High': [105.0], 'Low': [95.0], 'Close': [102.0],
+            'Adj Close': [102.0], 'Volume': [1000], 'Ticker': [ticker]
+        })
+
+    def _mock_earnings(ticker):
+        return pd.DataFrame({
+            'Date': [pd.Timestamp('2023-01-15')],
+            'EPS': [1.5],
+            'Surprise_Percentage': [3.5],
+            'Ticker': [ticker]
+        })
+
+    monkeypatch.setattr(collector, "fetch_stock_price_data", _mock_price)
+    monkeypatch.setattr(collector, "fetch_earnings_dates", _mock_earnings)
+
+    # Test concurrent execution
+    price_df, earnings_df = collector.fetch_multiple_stocks(tickers, max_workers=2)
+    assert len(price_df) == 4
+    assert len(earnings_df) == 4
+    assert price_df['Ticker'].tolist() == tickers
+    assert earnings_df['Ticker'].tolist() == tickers
+
+    # Test serial execution fallback (max_workers=1)
+    price_serial, earnings_serial = collector.fetch_multiple_stocks(tickers, max_workers=1)
+    assert price_serial['Ticker'].tolist() == tickers
+    assert earnings_serial['Ticker'].tolist() == tickers
+
+

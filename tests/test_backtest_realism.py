@@ -85,3 +85,29 @@ def test_mean_reversion_strategy_with_costs(sample_events):
     assert res['total_commission_cost'] > 0
     assert len(res['trades']) == 2
 
+
+def test_shared_run_signal_strategy_engine(sample_events):
+    """Verify shared _run_signal_strategy generalizes over custom signal callables"""
+    bt = Backtester(
+        initial_capital=50000.0,
+        commission_rate=0.0005,
+        slippage_bps=2.0,
+        next_day_execution=False
+    )
+
+    # Custom signal callable: buy only if surprise > 0, never short
+    custom_signal = lambda s: 1 if s > 0 else 0
+
+    res = bt._run_signal_strategy(
+        sample_events,
+        signal_fn=custom_signal,
+        strategy_name="CustomLongOnly",
+        holding_period=4
+    )
+
+    assert res['total_trades'] == 1
+    assert res['trades'][0]['Signal'] == 'LONG'
+    assert res['trades'][0]['Ticker'] == 'AAA'
+    assert res['trades'][0]['Strategy'] == 'CustomLongOnly'
+
+

@@ -18,6 +18,13 @@ from src.backtesting import Backtester
 from src.visualizations import Visualizer
 from src.sector_comparison import SectorAnalyzer
 from src.sentiment_analysis import SentimentAnalyzer
+from src.chart_data import (
+    prepare_surprise_vs_reaction_data,
+    prepare_model_comparison_data,
+    prepare_volatility_analysis_data,
+    prepare_volume_analysis_data,
+    prepare_feature_importance_data,
+)
 
 __version__ = "1.0.0"
 
@@ -39,4 +46,9 @@ __all__ = [
     "Visualizer",
     "SectorAnalyzer",
     "SentimentAnalyzer",
+    "prepare_surprise_vs_reaction_data",
+    "prepare_model_comparison_data",
+    "prepare_volatility_analysis_data",
+    "prepare_volume_analysis_data",
+    "prepare_feature_importance_data",
 ]

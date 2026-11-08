@@ -14,6 +14,24 @@ def test_sector_analyzer_mapping():
     assert analyzer.assign_sector("UNKNOWN_TICKER") == "Other"
 
 
+def test_sector_mapping_json_file_loading(tmp_path):
+    """Verify SectorAnalyzer loads mappings from JSON file and handles fallbacks"""
+    import json
+
+    custom_json = tmp_path / "custom_sectors.json"
+    custom_json.write_text(json.dumps({"XYZ": "SpaceExploration", "ABC": "Biotech"}))
+
+    # Load from custom path
+    custom_analyzer = SectorAnalyzer(mapping_path=custom_json)
+    assert custom_analyzer.assign_sector("XYZ") == "SpaceExploration"
+    assert custom_analyzer.assign_sector("ABC") == "Biotech"
+
+    # Fallback when file doesn't exist
+    missing_analyzer = SectorAnalyzer(mapping_path=tmp_path / "nonexistent.json")
+    assert missing_analyzer.assign_sector("AAPL") == "Technology"
+
+
+
 def test_sector_analysis_grouping(event_analysis_df):
     analyzer = SectorAnalyzer()
     res = analyzer.analyze_by_sector(event_analysis_df)

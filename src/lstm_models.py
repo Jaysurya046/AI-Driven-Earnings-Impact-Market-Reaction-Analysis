@@ -34,6 +34,15 @@ class LSTMPredictor:
         self.model: Any = None
         self.scaler: Any = None
         self.history: Any = None
+
+    @staticmethod
+    def is_available() -> bool:
+        """Check if TensorFlow deep learning dependencies are installed."""
+        try:
+            import tensorflow as tf  # noqa: F401
+            return True
+        except ImportError:
+            return False
     
     def _check_tensorflow(self):
         """Check if TensorFlow is available"""
@@ -56,9 +65,11 @@ class LSTMPredictor:
                 'MinMaxScaler': MinMaxScaler
             }
         except ImportError as e:
-            logger.error(f"TensorFlow not installed. Run: pip install tensorflow")
+            logger.error("TensorFlow not installed. Run: pip install .[deeplearning]")
             logger.error(f"Error: {str(e)}")
-            raise
+            raise RuntimeError(
+                "TensorFlow is required for LSTM models. Install via: pip install .[deeplearning]"
+            ) from e
     
     def prepare_sequences(self, data: np.ndarray, target: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
         """
@@ -344,9 +355,10 @@ class HybridEnsemblePredictor:
     
     def __init__(self):
         """Initialize hybrid ensemble"""
-        self.lstm_predictor = None
-        self.traditional_models = {}
-        self.weights = {}
+        self.lstm_predictor: Optional[LSTMPredictor] = None
+        self.traditional_models: Dict[str, Any] = {}
+        self.scalers: Dict[str, Any] = {}
+        self.weights: Dict[str, float] = {}
     
     def train(self, X_train: np.ndarray, y_train: np.ndarray,
               X_test: np.ndarray, y_test: np.ndarray) -> Dict:
@@ -379,15 +391,16 @@ class HybridEnsemblePredictor:
         best_traditional = model_comparison.loc[model_comparison['F1-Score'].idxmax()]
         best_model_name = best_traditional['Model']
         self.traditional_models[best_model_name] = trainer.models[best_model_name]
+        self.scalers[best_model_name] = trainer.scalers.get(best_model_name, None)
         
         # Calculate ensemble weights based on F1-scores
-        lstm_f1 = lstm_eval['F1-Score']
-        traditional_f1 = best_traditional['F1-Score']
+        lstm_f1 = lstm_eval.get('F1-Score', 0.5)
+        traditional_f1 = best_traditional.get('F1-Score', 0.5)
         
         total_f1 = lstm_f1 + traditional_f1
         self.weights = {
-            'lstm': lstm_f1 / total_f1,
-            'traditional': traditional_f1 / total_f1
+            'lstm': lstm_f1 / total_f1 if total_f1 > 0 else 0.5,
+            'traditional': traditional_f1 / total_f1 if total_f1 > 0 else 0.5
         }
         
         results = {
@@ -418,18 +431,24 @@ class HybridEnsemblePredictor:
         
         # Get predictions from both models
         lstm_pred = self.lstm_predictor.predict_proba(X)
+        if lstm_pred is None:
+            return None
         
         # Get traditional model prediction
         model_name = list(self.traditional_models.keys())[0]
         model = self.traditional_models[model_name]
-        scaler = getattr(model_name, 'scalers', {}).get(model_name, None)
+        scaler = self.scalers.get(model_name, None)
         
         if scaler is not None:
             X_scaled = scaler.transform(X)
         else:
             X_scaled = X
         
-        traditional_pred = model.predict_proba(X_scaled)[:, 1]
+        if hasattr(model, "predict_proba"):
+            probs = model.predict_proba(X_scaled)
+            traditional_pred = probs[:, 1] if probs.ndim == 2 and probs.shape[1] > 1 else probs.flatten()
+        else:
+            traditional_pred = model.predict(X_scaled).flatten()
         
         # Align predictions (LSTM has sequence offset)
         min_len = min(len(lstm_pred), len(traditional_pred))
@@ -441,6 +460,8 @@ class HybridEnsemblePredictor:
             self.weights['lstm'] * lstm_pred +
             self.weights['traditional'] * traditional_pred
         )
+        
+        return ensemble_pred
         
         return ensemble_pred
 

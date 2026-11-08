@@ -5,7 +5,7 @@ Tests trading strategies based on earnings signals
 
 import pandas as pd
 import numpy as np
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Callable, Dict, List, Optional, Tuple
 import logging
 from datetime import datetime
 
@@ -51,6 +51,168 @@ class Backtester:
         self.portfolio_values = []
         self.results = None
     
+    def _run_signal_strategy(
+        self,
+        event_analysis: pd.DataFrame,
+        signal_fn: Callable[[float], int],
+        strategy_name: str,
+        holding_period: int = 5,
+        position_size: float = 0.1,
+        invert_return: bool = False
+    ) -> Dict:
+        """
+        Shared execution engine for signal-based earnings trading strategies.
+
+        Args:
+            event_analysis: DataFrame with earnings events
+            signal_fn: Callable mapping surprise percentage to trade signal (-1, 0, 1)
+            strategy_name: Descriptive name of the strategy for reporting
+            holding_period: Days to hold position
+            position_size: Fraction of capital per trade
+            invert_return: Whether to invert return relative to signal (used in mean-reversion)
+
+        Returns:
+            Dictionary with complete backtest results and performance metrics
+        """
+        logger.info(f"Running {strategy_name.lower()} strategy (holding={holding_period} days, size={position_size})")
+
+        self.reset()
+        data = event_analysis.copy()
+        data = data.sort_values(['Ticker', 'EarningsDate'])
+
+        portfolio_value = [self.initial_capital]
+        dates = []
+        trades = []
+
+        for ticker in data['Ticker'].unique():
+            ticker_data = data[data['Ticker'] == ticker].copy()
+
+            for idx, row in ticker_data.iterrows():
+                surprise = row['SurprisePercentage']
+                earnings_date = row['EarningsDate']
+
+                signal = signal_fn(surprise)
+
+                if signal != 0:
+                    invest_amount = self.capital * position_size
+
+                    if 'PostEventReturn' in row:
+                        daily_return = row['PostEventReturn'] / 5.0
+                        total_return = daily_return * min(holding_period, 5)
+                    else:
+                        total_return = 0.0
+
+                    dt_earnings = pd.to_datetime(earnings_date)
+                    if self.next_day_execution:
+                        entry_date = dt_earnings + pd.tseries.offsets.BDay(1)
+                        exit_date = entry_date + pd.tseries.offsets.BDay(holding_period)
+                        timing_str = 'next_day_open'
+                    else:
+                        entry_date = dt_earnings
+                        exit_date = dt_earnings + pd.Timedelta(days=holding_period)
+                        timing_str = 'same_day_close'
+
+                    if invert_return:
+                        gross_return_pct = -total_return * np.sign(signal)
+                    else:
+                        gross_return_pct = total_return * signal
+
+                    gross_profit_loss = invest_amount * (gross_return_pct / 100.0)
+
+                    slippage_cost = invest_amount * (2.0 * self.slippage_bps / 10000.0)
+                    commission_cost = invest_amount * (2.0 * self.commission_rate)
+                    total_costs = slippage_cost + commission_cost
+
+                    profit_loss = gross_profit_loss - total_costs
+                    net_return_pct = (profit_loss / invest_amount) * 100.0 if invest_amount > 0 else 0.0
+
+                    trade = {
+                        'Ticker': ticker,
+                        'EarningsDate': earnings_date,
+                        'EntryDate': entry_date,
+                        'ExitDate': exit_date,
+                        'ExecutionTiming': timing_str,
+                        'Signal': 'LONG' if signal > 0 else 'SHORT',
+                        'Strategy': strategy_name,
+                        'Surprise': surprise,
+                        'Invested': invest_amount,
+                        'GrossReturn': gross_return_pct,
+                        'NetReturn': net_return_pct,
+                        'Return': net_return_pct,
+                        'GrossProfitLoss': gross_profit_loss,
+                        'SlippageCost': slippage_cost,
+                        'CommissionCost': commission_cost,
+                        'ProfitLoss': profit_loss
+                    }
+                    trades.append(trade)
+
+                    self.capital += profit_loss
+                    portfolio_value.append(self.capital)
+                    dates.append(entry_date)
+
+        if trades:
+            trades_df = pd.DataFrame(trades)
+            trades_df = trades_df.sort_values('EntryDate')
+        else:
+            trades_df = pd.DataFrame()
+
+        portfolio_array = np.array(portfolio_value)
+        if len(portfolio_array) > 1:
+            returns = np.diff(portfolio_array) / portfolio_array[:-1]
+
+            total_return = (portfolio_array[-1] / portfolio_array[0]) - 1
+            n_periods = len(returns)
+            if n_periods > 0:
+                annualized_return = (1 + total_return) ** (252 / max(n_periods, 1)) - 1
+                sharpe_ratio = np.sqrt(252) * returns.mean() / (returns.std() + 1e-10) if returns.std() > 0 else 0
+            else:
+                annualized_return = 0
+                sharpe_ratio = 0
+
+            cumulative = np.maximum.accumulate(portfolio_array)
+            drawdowns = (cumulative - portfolio_array) / cumulative
+            max_drawdown = drawdowns.max()
+
+            if len(trades_df) > 0:
+                winning_trades = (trades_df['ProfitLoss'] > 0).sum()
+                win_rate = winning_trades / len(trades_df)
+            else:
+                win_rate = 0
+        else:
+            total_return = 0
+            annualized_return = 0
+            sharpe_ratio = 0
+            max_drawdown = 0
+            win_rate = 0
+
+        results = {
+            'initial_capital': self.initial_capital,
+            'final_capital': self.capital,
+            'total_return': total_return,
+            'annualized_return': annualized_return,
+            'sharpe_ratio': sharpe_ratio,
+            'max_drawdown': max_drawdown,
+            'win_rate': win_rate,
+            'total_trades': len(trades),
+            'winning_trades': int((trades_df['ProfitLoss'] > 0).sum()) if len(trades_df) > 0 else 0,
+            'losing_trades': int((trades_df['ProfitLoss'] < 0).sum()) if len(trades_df) > 0 else 0,
+            'avg_trade_return': trades_df['Return'].mean() if len(trades_df) > 0 else 0,
+            'total_slippage_cost': float(trades_df['SlippageCost'].sum()) if len(trades_df) > 0 else 0.0,
+            'total_commission_cost': float(trades_df['CommissionCost'].sum()) if len(trades_df) > 0 else 0.0,
+            'gross_profit_loss': float(trades_df['GrossProfitLoss'].sum()) if len(trades_df) > 0 else 0.0,
+            'net_profit_loss': float(trades_df['ProfitLoss'].sum()) if len(trades_df) > 0 else 0.0,
+            'commission_rate': self.commission_rate,
+            'slippage_bps': self.slippage_bps,
+            'next_day_execution': self.next_day_execution,
+            'portfolio_value': portfolio_value,
+            'dates': dates if dates else [datetime.now()],
+            'trades': trades
+        }
+
+        self.results = results
+        logger.info(f"Backtest complete: {len(trades)} trades, Total Return: {total_return:.2%}")
+        return results
+
     def momentum_strategy(
         self,
         event_analysis: pd.DataFrame,
@@ -70,162 +232,22 @@ class Backtester:
         Returns:
             Dictionary with backtest results
         """
-        logger.info(f"Running momentum strategy (threshold={threshold}%, holding={holding_period} days)")
-        
-        self.reset()
-        data = event_analysis.copy()
-        data = data.sort_values(['Ticker', 'EarningsDate'])
-        
-        portfolio_value = [self.initial_capital]
-        dates = []
-        trades = []
-        
-        # Group by ticker and simulate trades
-        for ticker in data['Ticker'].unique():
-            ticker_data = data[data['Ticker'] == ticker].copy()
-            
-            for idx, row in ticker_data.iterrows():
-                surprise = row['SurprisePercentage']
-                earnings_date = row['EarningsDate']
-                
-                # Determine signal
-                if surprise >= threshold:
-                    signal = 1  # Buy
-                elif surprise <= -threshold:
-                    signal = -1  # Short/Sell
-                else:
-                    signal = 0  # No trade
-                
-                if signal != 0:
-                    # Calculate position size
-                    invest_amount = self.capital * position_size
-                    
-                    # Simulate return over holding period
-                    if 'PostEventReturn' in row:
-                        daily_return = row['PostEventReturn'] / 5  # Assume 5-day window
-                        total_return = daily_return * min(holding_period, 5)
-                    else:
-                        total_return = 0
-                    
-                    # Next-day execution timing
-                    dt_earnings = pd.to_datetime(earnings_date)
-                    if self.next_day_execution:
-                        entry_date = dt_earnings + pd.tseries.offsets.BDay(1)
-                        exit_date = entry_date + pd.tseries.offsets.BDay(holding_period)
-                        timing_str = 'next_day_open'
-                    else:
-                        entry_date = dt_earnings
-                        exit_date = dt_earnings + pd.Timedelta(days=holding_period)
-                        timing_str = 'same_day_close'
+        def _signal(surprise: float) -> int:
+            if surprise >= threshold:
+                return 1
+            elif surprise <= -threshold:
+                return -1
+            return 0
 
-                    gross_return_pct = total_return * signal
-                    gross_profit_loss = invest_amount * (gross_return_pct / 100.0)
+        return self._run_signal_strategy(
+            event_analysis=event_analysis,
+            signal_fn=_signal,
+            strategy_name="Momentum",
+            holding_period=holding_period,
+            position_size=position_size,
+            invert_return=False
+        )
 
-                    # Realistic transaction costs: slippage + commission on entry and exit
-                    slippage_cost = invest_amount * (2.0 * self.slippage_bps / 10000.0)
-                    commission_cost = invest_amount * (2.0 * self.commission_rate)
-                    total_costs = slippage_cost + commission_cost
-
-                    profit_loss = gross_profit_loss - total_costs
-                    net_return_pct = (profit_loss / invest_amount) * 100.0 if invest_amount > 0 else 0.0
-                    
-                    # Record trade
-                    trade = {
-                        'Ticker': ticker,
-                        'EarningsDate': earnings_date,
-                        'EntryDate': entry_date,
-                        'ExitDate': exit_date,
-                        'ExecutionTiming': timing_str,
-                        'Signal': 'LONG' if signal > 0 else 'SHORT',
-                        'Surprise': surprise,
-                        'Invested': invest_amount,
-                        'GrossReturn': gross_return_pct,
-                        'NetReturn': net_return_pct,
-                        'Return': net_return_pct,
-                        'GrossProfitLoss': gross_profit_loss,
-                        'SlippageCost': slippage_cost,
-                        'CommissionCost': commission_cost,
-                        'ProfitLoss': profit_loss
-                    }
-                    trades.append(trade)
-                    
-                    # Update capital
-                    self.capital += profit_loss
-                    
-                    # Update portfolio value
-                    portfolio_value.append(self.capital)
-                    dates.append(entry_date)
-        
-        # Sort by date
-        if trades:
-            trades_df = pd.DataFrame(trades)
-            trades_df = trades_df.sort_values('EntryDate')
-        else:
-            trades_df = pd.DataFrame()
-        
-        # Calculate performance metrics
-        portfolio_array = np.array(portfolio_value)
-        if len(portfolio_array) > 1:
-            returns = np.diff(portfolio_array) / portfolio_array[:-1]
-            
-            # Annualized metrics (assuming 252 trading days)
-            total_return = (portfolio_array[-1] / portfolio_array[0]) - 1
-            n_periods = len(returns)
-            if n_periods > 0:
-                annualized_return = (1 + total_return) ** (252 / max(n_periods, 1)) - 1
-                sharpe_ratio = np.sqrt(252) * returns.mean() / (returns.std() + 1e-10) if returns.std() > 0 else 0
-            else:
-                annualized_return = 0
-                sharpe_ratio = 0
-            
-            # Maximum drawdown
-            cumulative = np.maximum.accumulate(portfolio_array)
-            drawdowns = (cumulative - portfolio_array) / cumulative
-            max_drawdown = drawdowns.max()
-            
-            # Win rate
-            if len(trades_df) > 0:
-                winning_trades = (trades_df['ProfitLoss'] > 0).sum()
-                win_rate = winning_trades / len(trades_df)
-            else:
-                win_rate = 0
-        else:
-            total_return = 0
-            annualized_return = 0
-            sharpe_ratio = 0
-            max_drawdown = 0
-            win_rate = 0
-        
-        results = {
-            'initial_capital': self.initial_capital,
-            'final_capital': self.capital,
-            'total_return': total_return,
-            'annualized_return': annualized_return,
-            'sharpe_ratio': sharpe_ratio,
-            'max_drawdown': max_drawdown,
-            'win_rate': win_rate,
-            'total_trades': len(trades),
-            'winning_trades': int((trades_df['ProfitLoss'] > 0).sum()) if len(trades_df) > 0 else 0,
-            'losing_trades': int((trades_df['ProfitLoss'] < 0).sum()) if len(trades_df) > 0 else 0,
-            'avg_trade_return': trades_df['Return'].mean() if len(trades_df) > 0 else 0,
-            'total_slippage_cost': float(trades_df['SlippageCost'].sum()) if len(trades_df) > 0 else 0.0,
-            'total_commission_cost': float(trades_df['CommissionCost'].sum()) if len(trades_df) > 0 else 0.0,
-            'gross_profit_loss': float(trades_df['GrossProfitLoss'].sum()) if len(trades_df) > 0 else 0.0,
-            'net_profit_loss': float(trades_df['ProfitLoss'].sum()) if len(trades_df) > 0 else 0.0,
-            'commission_rate': self.commission_rate,
-            'slippage_bps': self.slippage_bps,
-            'next_day_execution': self.next_day_execution,
-            'portfolio_value': portfolio_value,
-            'dates': dates if dates else [datetime.now()],
-            'trades': trades
-        }
-        
-        self.results = results
-        
-        logger.info(f"Backtest complete: {len(trades)} trades, Total Return: {total_return:.2%}")
-        
-        return results
-    
     def mean_reversion_strategy(
         self,
         event_analysis: pd.DataFrame,
@@ -245,149 +267,21 @@ class Backtester:
         Returns:
             Dictionary with backtest results
         """
-        logger.info(f"Running mean reversion strategy (threshold={threshold}%)")
-        
-        self.reset()
-        data = event_analysis.copy()
-        data = data.sort_values(['Ticker', 'EarningsDate'])
-        
-        portfolio_value = [self.initial_capital]
-        dates = []
-        trades = []
-        
-        for ticker in data['Ticker'].unique():
-            ticker_data = data[data['Ticker'] == ticker].copy()
-            
-            for idx, row in ticker_data.iterrows():
-                surprise = row['SurprisePercentage']
-                earnings_date = row['EarningsDate']
-                
-                # Mean reversion: bet against extreme moves
-                if surprise >= threshold:
-                    signal = -1  # Short (expect reversal down)
-                elif surprise <= -threshold:
-                    signal = 1  # Long (expect reversal up)
-                else:
-                    signal = 0
-                
-                if signal != 0:
-                    invest_amount = self.capital * position_size
-                    
-                    if 'PostEventReturn' in row:
-                        daily_return = row['PostEventReturn'] / 5
-                        total_return = daily_return * min(holding_period, 5)
-                    else:
-                        total_return = 0
-                    
-                    # Next-day execution timing
-                    dt_earnings = pd.to_datetime(earnings_date)
-                    if self.next_day_execution:
-                        entry_date = dt_earnings + pd.tseries.offsets.BDay(1)
-                        exit_date = entry_date + pd.tseries.offsets.BDay(holding_period)
-                        timing_str = 'next_day_open'
-                    else:
-                        entry_date = dt_earnings
-                        exit_date = dt_earnings + pd.Timedelta(days=holding_period)
-                        timing_str = 'same_day_close'
+        def _signal(surprise: float) -> int:
+            if surprise >= threshold:
+                return -1
+            elif surprise <= -threshold:
+                return 1
+            return 0
 
-                    # In mean reversion, bet against initial move
-                    gross_return_pct = -total_return * np.sign(signal)
-                    gross_profit_loss = invest_amount * (gross_return_pct / 100.0)
-
-                    slippage_cost = invest_amount * (2.0 * self.slippage_bps / 10000.0)
-                    commission_cost = invest_amount * (2.0 * self.commission_rate)
-                    total_costs = slippage_cost + commission_cost
-
-                    profit_loss = gross_profit_loss - total_costs
-                    net_return_pct = (profit_loss / invest_amount) * 100.0 if invest_amount > 0 else 0.0
-
-                    trade = {
-                        'Ticker': ticker,
-                        'EarningsDate': earnings_date,
-                        'EntryDate': entry_date,
-                        'ExitDate': exit_date,
-                        'ExecutionTiming': timing_str,
-                        'Signal': 'LONG' if signal > 0 else 'SHORT',
-                        'Strategy': 'Mean Reversion',
-                        'Surprise': surprise,
-                        'Invested': invest_amount,
-                        'GrossReturn': gross_return_pct,
-                        'NetReturn': net_return_pct,
-                        'Return': net_return_pct,
-                        'GrossProfitLoss': gross_profit_loss,
-                        'SlippageCost': slippage_cost,
-                        'CommissionCost': commission_cost,
-                        'ProfitLoss': profit_loss
-                    }
-                    trades.append(trade)
-                    
-                    self.capital += profit_loss
-                    portfolio_value.append(self.capital)
-                    dates.append(entry_date)
-        
-        if trades:
-            trades_df = pd.DataFrame(trades)
-            trades_df = trades_df.sort_values('EntryDate')
-        else:
-            trades_df = pd.DataFrame()
-        
-        # Calculate metrics
-        portfolio_array = np.array(portfolio_value)
-        if len(portfolio_array) > 1:
-            returns = np.diff(portfolio_array) / portfolio_array[:-1]
-            total_return = (portfolio_array[-1] / portfolio_array[0]) - 1
-            n_periods = len(returns)
-            if n_periods > 0:
-                annualized_return = (1 + total_return) ** (252 / max(n_periods, 1)) - 1
-                sharpe_ratio = np.sqrt(252) * returns.mean() / (returns.std() + 1e-10) if returns.std() > 0 else 0
-            else:
-                annualized_return = 0
-                sharpe_ratio = 0
-            
-            cumulative = np.maximum.accumulate(portfolio_array)
-            drawdowns = (cumulative - portfolio_array) / cumulative
-            max_drawdown = drawdowns.max()
-            
-            if len(trades_df) > 0:
-                winning_trades = (trades_df['ProfitLoss'] > 0).sum()
-                win_rate = winning_trades / len(trades_df)
-            else:
-                win_rate = 0
-        else:
-            total_return = 0
-            annualized_return = 0
-            sharpe_ratio = 0
-            max_drawdown = 0
-            win_rate = 0
-        
-        results = {
-            'initial_capital': self.initial_capital,
-            'final_capital': self.capital,
-            'total_return': total_return,
-            'annualized_return': annualized_return,
-            'sharpe_ratio': sharpe_ratio,
-            'max_drawdown': max_drawdown,
-            'win_rate': win_rate,
-            'total_trades': len(trades),
-            'winning_trades': int((trades_df['ProfitLoss'] > 0).sum()) if len(trades_df) > 0 else 0,
-            'losing_trades': int((trades_df['ProfitLoss'] < 0).sum()) if len(trades_df) > 0 else 0,
-            'avg_trade_return': trades_df['Return'].mean() if len(trades_df) > 0 else 0,
-            'total_slippage_cost': float(trades_df['SlippageCost'].sum()) if len(trades_df) > 0 else 0.0,
-            'total_commission_cost': float(trades_df['CommissionCost'].sum()) if len(trades_df) > 0 else 0.0,
-            'gross_profit_loss': float(trades_df['GrossProfitLoss'].sum()) if len(trades_df) > 0 else 0.0,
-            'net_profit_loss': float(trades_df['ProfitLoss'].sum()) if len(trades_df) > 0 else 0.0,
-            'commission_rate': self.commission_rate,
-            'slippage_bps': self.slippage_bps,
-            'next_day_execution': self.next_day_execution,
-            'portfolio_value': portfolio_value,
-            'dates': dates if dates else [datetime.now()],
-            'trades': trades
-        }
-        
-        self.results = results
-        logger.info(f"Backtest complete: {len(trades)} trades, Total Return: {total_return:.2%}")
-        
-        return results
+        return self._run_signal_strategy(
+            event_analysis=event_analysis,
+            signal_fn=_signal,
+            strategy_name="Mean Reversion",
+            holding_period=holding_period,
+            position_size=position_size,
+            invert_return=True
+        )
     
     def run_strategy(
         self,

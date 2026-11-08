@@ -101,3 +101,85 @@ def test_prediction_with_populated_state(client, event_analysis_df):
     metrics_resp = client.get("/metrics")
     assert metrics_resp.status_code == 200
     assert metrics_resp.json()["total_events"] > 0
+
+
+def test_enforce_single_worker_environment(monkeypatch):
+    """Verify single-worker enforcement guard catches multi-worker configurations"""
+    import sys
+    from api_server import enforce_single_worker_environment
+
+    # Safe single worker
+    monkeypatch.delenv("WEB_CONCURRENCY", raising=False)
+    monkeypatch.setattr(sys, "argv", ["api_server.py"])
+    enforce_single_worker_environment()  # Should not raise
+
+    # Disallowed via WEB_CONCURRENCY
+    monkeypatch.setenv("WEB_CONCURRENCY", "4")
+    with pytest.raises(RuntimeError, match="requires single-worker execution"):
+        enforce_single_worker_environment()
+
+    # Disallowed via CLI flag
+    monkeypatch.delenv("WEB_CONCURRENCY", raising=False)
+    monkeypatch.setattr(sys, "argv", ["api_server.py", "--workers", "2"])
+    with pytest.raises(RuntimeError, match="requires single-worker execution"):
+        enforce_single_worker_environment()
+
+
+def test_pipeline_run_for_api(monkeypatch):
+    """Verify EarningsAnalysisPipeline.run_for_api provides unified single orchestration entry point"""
+    from main import EarningsAnalysisPipeline
+
+    pipeline = EarningsAnalysisPipeline({
+        'lookback_years': 1,
+        'event_window': 3,
+        'save_intermediate': False,
+        'models_to_train': ['logistic_regression']
+    })
+
+    # Mock data collection and balanced event analysis
+    sample_prices = pd.DataFrame({
+        'Date': pd.date_range('2023-01-01', periods=100),
+        'Open': 100.0, 'High': 105.0, 'Low': 95.0, 'Close': 102.0, 'Adj Close': 102.0,
+        'Volume': 1000000, 'Ticker': 'AAA'
+    })
+    sample_earnings = pd.DataFrame({
+        'Date': [pd.Timestamp('2023-02-15')],
+        'EPS': [1.5],
+        'Surprise_Percentage': [4.0],
+        'Ticker': ['AAA']
+    })
+
+    sample_events = pd.DataFrame([
+        {
+            'Ticker': f'T{i}',
+            'EarningsDate': pd.Timestamp(f'2023-{(i % 6) + 1:02d}-15'),
+            'SurprisePercentage': 2.0 if i % 2 == 0 else -2.0,
+            'PostEventReturn': 3.0 if i % 2 == 0 else -3.0,
+            'PreEventReturn': 1.0,
+            'AbnormalReturnCAR': 2.0 if i % 2 == 0 else -2.0,
+            'PreEventVolatility': 1.5,
+            'PostEventVolatility': 2.0,
+            'EstimationVolatility': 1.2,
+            'VolumeSpikeRatio': 1.8,
+            'PreEventVolume': 1000000,
+            'PostEventVolume': 1800000,
+            'EstimationAvgVolume': 1000000,
+            'PreEventAvgVolume': 1000000,
+            'DataPointsInWindow': 11,
+            'Sector': 'Technology'
+        }
+        for i in range(20)
+    ])
+
+    monkeypatch.setattr(pipeline, "step_1_collect_data", lambda tickers: (sample_prices, sample_earnings))
+    monkeypatch.setattr(pipeline, "step_2_event_analysis", lambda p, e: sample_events)
+
+    results = pipeline.run_for_api(["AAA"])
+    assert 'pipeline' in results
+    assert 'price_data' in results
+    assert 'event_analysis' in results
+    assert 'features' in results
+    assert 'model_trainer' in results
+    assert 'model_comparison' in results
+    assert 'report' in results
+

@@ -10,6 +10,14 @@ import seaborn as sns
 from typing import Dict, List, Optional
 import logging
 
+from src.chart_data import (
+    prepare_surprise_vs_reaction_data,
+    prepare_model_comparison_data,
+    prepare_volatility_analysis_data,
+    prepare_volume_analysis_data,
+    prepare_feature_importance_data,
+)
+
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
@@ -81,44 +89,34 @@ class Visualizer:
             event_analysis_df: DataFrame from event analysis
             save_path: Optional path to save figure
         """
+        data = prepare_surprise_vs_reaction_data(event_analysis_df)
         fig, ax = plt.subplots(figsize=(12, 7))
-        
-        colors = ['green' if x > 0 else 'red' for x in event_analysis_df['PostEventReturn']]
-        
-        scatter = ax.scatter(
-            event_analysis_df['SurprisePercentage'],
-            event_analysis_df['PostEventReturn'],
-            c=colors, alpha=0.6, s=100, edgecolors='black', linewidth=0.5
+
+        ax.scatter(
+            data['surprises'],
+            data['returns'],
+            c=data['colors'], alpha=0.6, s=100, edgecolors='black', linewidth=0.5
         )
-        
-        # Add trend line
-        z = np.polyfit(
-            event_analysis_df['SurprisePercentage'].dropna(),
-            event_analysis_df[event_analysis_df['SurprisePercentage'].notna()]['PostEventReturn'],
-            1
-        )
-        p = np.poly1d(z)
-        x_range = np.linspace(
-            event_analysis_df['SurprisePercentage'].min(),
-            event_analysis_df['SurprisePercentage'].max(),
-            100
-        )
-        ax.plot(x_range, p(x_range), "b--", alpha=0.8, linewidth=2, label='Trend')
-        
+
+        if data['has_trend']:
+            label = f"Trend (r={data['correlation']:.2f})"
+            ax.plot(data['trend_x'], data['trend_y'], "b--", alpha=0.8, linewidth=2, label=label)
+
         ax.axhline(y=0, color='black', linestyle='-', alpha=0.3)
         ax.axvline(x=0, color='black', linestyle='-', alpha=0.3)
         ax.set_xlabel('Earnings Surprise (%)', fontsize=12)
         ax.set_ylabel('Post-Event Return (%)', fontsize=12)
         ax.set_title('Earnings Surprise vs Market Reaction', fontsize=14, fontweight='bold')
-        ax.legend()
+        if data['has_trend']:
+            ax.legend()
         ax.grid(True, alpha=0.3)
-        
+
         plt.tight_layout()
-        
+
         if save_path:
             plt.savefig(save_path, dpi=300, bbox_inches='tight')
             logger.info(f"Plot saved to {save_path}")
-        
+
         plt.show()
     
     @staticmethod
@@ -178,19 +176,19 @@ class Visualizer:
             top_n: Number of top features to display
             save_path: Optional path to save figure
         """
+        data = prepare_feature_importance_data(importance_df, top_n=top_n)
         fig, ax = plt.subplots(figsize=(10, 8))
-        
-        top_features = importance_df.head(top_n)
-        
-        ax.barh(range(len(top_features)), top_features['Importance'].values, color='steelblue', edgecolor='black')
-        ax.set_yticks(range(len(top_features)))
-        ax.set_yticklabels(top_features['Feature'].values)
+
+        top_df = data['top_df']
+        ax.barh(range(len(top_df)), data['importances'], color='steelblue', edgecolor='black')
+        ax.set_yticks(range(len(top_df)))
+        ax.set_yticklabels(data['features'])
         ax.set_xlabel('Importance Score')
         ax.set_title(f'Top {top_n} Feature Importances', fontsize=12, fontweight='bold')
         ax.grid(True, alpha=0.3, axis='x')
-        
+
         plt.tight_layout()
-        
+
         if save_path:
             plt.savefig(save_path, dpi=300, bbox_inches='tight')
             logger.info(f"Plot saved to {save_path}")
@@ -209,29 +207,30 @@ class Visualizer:
             event_analysis_df: DataFrame from event analysis
             save_path: Optional path to save figure
         """
+        prep = prepare_volatility_analysis_data(event_analysis_df)
         fig, ax = plt.subplots(figsize=(12, 6))
-        
-        x_pos = np.arange(len(event_analysis_df))
+
+        x_pos = np.arange(len(prep['tickers']))
         width = 0.25
-        
-        ax.bar(x_pos - width, event_analysis_df['EstimationVolatility'], width, 
+
+        ax.bar(x_pos - width, prep['estimation'], width,
                label='Estimation Period', alpha=0.8, color='blue')
-        ax.bar(x_pos, event_analysis_df['PreEventVolatility'], width, 
+        ax.bar(x_pos, prep['pre_event'], width,
                label='Pre-Event', alpha=0.8, color='orange')
-        ax.bar(x_pos + width, event_analysis_df['PostEventVolatility'], width, 
+        ax.bar(x_pos + width, prep['post_event'], width,
                label='Post-Event', alpha=0.8, color='red')
-        
+
         ax.set_ylabel('Volatility (%)')
         ax.set_title('Volatility Around Earnings Events', fontsize=12, fontweight='bold')
         ax.legend()
         ax.grid(True, alpha=0.3, axis='y')
-        
+
         plt.tight_layout()
-        
+
         if save_path:
             plt.savefig(save_path, dpi=300, bbox_inches='tight')
             logger.info(f"Plot saved to {save_path}")
-        
+
         plt.show()
     
     @staticmethod

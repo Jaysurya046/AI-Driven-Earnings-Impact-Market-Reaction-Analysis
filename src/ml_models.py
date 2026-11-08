@@ -213,58 +213,76 @@ class ModelTrainer:
         X_train: np.ndarray,
         X_test: np.ndarray,
         y_train: np.ndarray,
-        y_test: np.ndarray
+        y_test: np.ndarray,
+        models_to_train: Optional[List[str]] = None
     ) -> pd.DataFrame:
         """
-        Train all models and generate comparison
-        
+        Train specified or all models and generate comparison
+
         Args:
             X_train: Training features
             X_test: Test features
             y_train: Training labels
             y_test: Test labels
-            
+            models_to_train: Optional list of model keys to train, e.g.
+                ['logistic_regression', 'random_forest', 'xgboost'].
+                Defaults to all supported models if None.
+
         Returns:
-            DataFrame with comparison of all models
+            DataFrame with comparison of all trained models
         """
         results_list = []
-        
-        # Logistic Regression
-        lr_model, lr_scaler = self.train_logistic_regression(X_train, y_train)
-        lr_results = self.evaluate_model(lr_model, X_test, y_test, lr_scaler, "Logistic Regression")
-        self.models['Logistic Regression'] = lr_model
-        self.scalers['Logistic Regression'] = lr_scaler
-        results_list.append(lr_results)
-        
-        # Random Forest
-        rf_model = self.train_random_forest(X_train, y_train)
-        rf_results = self.evaluate_model(rf_model, X_test, y_test, None, "Random Forest")
-        self.models['Random Forest'] = rf_model
-        self.scalers['Random Forest'] = None
-        results_list.append(rf_results)
-        
-        # XGBoost (tree-based: feature scaling disabled by default)
-        xgb_model, xgb_scaler = self.train_xgboost(X_train, y_train, scale=False)
-        xgb_results = self.evaluate_model(xgb_model, X_test, y_test, xgb_scaler, "XGBoost")
-        self.models['XGBoost'] = xgb_model
-        self.scalers['XGBoost'] = xgb_scaler
-        results_list.append(xgb_results)
-        
-        # Create comparison dataframe
-        comparison_df = pd.DataFrame([
-            {
-                'Model': r['Model'],
-                'Accuracy': r['Accuracy'],
-                'Precision': r['Precision'],
-                'Recall': r['Recall'],
-                'F1-Score': r['F1-Score'],
-                'AUC-ROC': r.get('AUC-ROC', np.nan)
+
+        if models_to_train is not None:
+            normalized_targets = {
+                m.lower().replace(' ', '_').replace('-', '_').strip()
+                for m in models_to_train
             }
-            for r in results_list
-        ])
-        
+        else:
+            normalized_targets = {'logistic_regression', 'random_forest', 'xgboost'}
+
+        # Logistic Regression
+        if 'logistic_regression' in normalized_targets:
+            lr_model, lr_scaler = self.train_logistic_regression(X_train, y_train)
+            lr_results = self.evaluate_model(lr_model, X_test, y_test, lr_scaler, "Logistic Regression")
+            self.models['Logistic Regression'] = lr_model
+            self.scalers['Logistic Regression'] = lr_scaler
+            results_list.append(lr_results)
+
+        # Random Forest
+        if 'random_forest' in normalized_targets:
+            rf_model = self.train_random_forest(X_train, y_train)
+            rf_results = self.evaluate_model(rf_model, X_test, y_test, None, "Random Forest")
+            self.models['Random Forest'] = rf_model
+            self.scalers['Random Forest'] = None
+            results_list.append(rf_results)
+
+        # XGBoost (tree-based: feature scaling disabled by default)
+        if 'xgboost' in normalized_targets:
+            xgb_model, xgb_scaler = self.train_xgboost(X_train, y_train, scale=False)
+            xgb_results = self.evaluate_model(xgb_model, X_test, y_test, xgb_scaler, "XGBoost")
+            self.models['XGBoost'] = xgb_model
+            self.scalers['XGBoost'] = xgb_scaler
+            results_list.append(xgb_results)
+
+        # Create comparison dataframe
+        if results_list:
+            comparison_df = pd.DataFrame([
+                {
+                    'Model': r['Model'],
+                    'Accuracy': r['Accuracy'],
+                    'Precision': r['Precision'],
+                    'Recall': r['Recall'],
+                    'F1-Score': r['F1-Score'],
+                    'AUC-ROC': r.get('AUC-ROC', np.nan)
+                }
+                for r in results_list
+            ])
+        else:
+            comparison_df = pd.DataFrame(columns=['Model', 'Accuracy', 'Precision', 'Recall', 'F1-Score', 'AUC-ROC'])
+
         self.results = {r['Model']: r for r in results_list}
-        
+
         return comparison_df
 
     def evaluate_cv(

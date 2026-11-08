@@ -3,13 +3,18 @@ Automated Retraining Scheduler
 Sets up scheduled retraining of ML models
 """
 
-import schedule
+try:
+    import schedule
+except ImportError:
+    schedule = None
 import time
 import logging
 from datetime import datetime
 from pathlib import Path
-from typing import List, Optional
+from typing import List, Optional, Union, Dict, Any
 import json
+
+from src.config import load_config, AppConfig
 
 logging.basicConfig(
     level=logging.INFO,
@@ -21,33 +26,40 @@ logger = logging.getLogger(__name__)
 class RetrainingScheduler:
     """Manages automated model retraining schedules"""
     
-    def __init__(self, config_path: str = 'retraining_config.json'):
+    def __init__(
+        self,
+        config_path: str = 'retraining_config.json',
+        app_config: Optional[Union[AppConfig, Dict[str, Any]]] = None
+    ):
         """
         Initialize scheduler
-        
+
         Args:
-            config_path: Path to configuration file
+            config_path: Path to scheduler-specific configuration file (cadence & triggers)
+            app_config: Canonical AppConfig or dict; defaults to loading via src.config.load_config()
         """
         self.config_path = Path(config_path)
+        if app_config is None:
+            self.app_config = load_config()
+        elif isinstance(app_config, dict):
+            loaded = load_config()
+            loaded.update(app_config)
+            self.app_config = loaded
+        else:
+            self.app_config = app_config
+
         self.config = self._load_config()
         self.last_training = None
         self.training_history = []
     
     def _load_config(self) -> dict:
-        """Load or create default configuration"""
+        """Load or create default scheduler cadence and alert configuration"""
         default_config = {
-            "tickers": ["AAPL", "MSFT", "GOOGL", "AMZN", "TSLA", "META", "NVDA"],
             "schedule": {
                 "frequency": "weekly",  # daily, weekly, monthly
                 "day_of_week": "monday",  # for weekly
                 "day_of_month": 1,  # for monthly
                 "time": "02:00"  # 2 AM UTC
-            },
-            "pipeline_config": {
-                "lookback_years": 5,
-                "event_window": 5,
-                "estimation_window": 60,
-                "label_threshold": 0.0
             },
             "retraining_triggers": {
                 "min_data_points": 50,
@@ -87,13 +99,13 @@ class RetrainingScheduler:
         Execute model retraining
         
         Args:
-            tickers: List of tickers to analyze (uses config if None)
+            tickers: List of tickers to analyze (uses AppConfig tickers if None)
             
         Returns:
             Dictionary with retraining results
         """
         if tickers is None:
-            tickers = self.config.get('tickers', [])
+            tickers = list(self.app_config.tickers)
         
         logger.info(f"Starting retraining for tickers: {tickers}")
         start_time = datetime.now()
@@ -101,14 +113,7 @@ class RetrainingScheduler:
         try:
             from main import EarningsAnalysisPipeline
             
-            pipeline_config = self.config.get('pipeline_config', {})
-            pipeline_config.update({
-                'data_dir': 'data',
-                'models_dir': 'models',
-                'viz_dir': 'visualizations'
-            })
-            
-            pipeline = EarningsAnalysisPipeline(pipeline_config)
+            pipeline = EarningsAnalysisPipeline(self.app_config)
             
             # Run complete pipeline
             pipeline.run_complete_pipeline(tickers)
@@ -205,6 +210,8 @@ class RetrainingScheduler:
     
     def setup_schedule(self):
         """Set up the retraining schedule based on configuration"""
+        if schedule is None:
+            raise RuntimeError("The 'schedule' library is required to set up schedules. Install with: pip install schedule")
         schedule_config = self.config.get('schedule', {})
         frequency = schedule_config.get('frequency', 'weekly')
         time_str = schedule_config.get('time', '02:00')

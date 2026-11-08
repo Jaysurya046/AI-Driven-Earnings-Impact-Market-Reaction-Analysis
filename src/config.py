@@ -62,10 +62,12 @@ def mask_secrets(config_dict: Dict[str, Any]) -> Dict[str, Any]:
 class AppConfig:
     """Unified configuration container with dict-like and attribute access."""
 
-    def __init__(self, data: Optional[Dict[str, Any]] = None):
+    def __init__(self, data: Optional[Dict[str, Any]] = None, **kwargs):
         self._data: Dict[str, Any] = dict(DEFAULT_CONFIG)
         if data:
             self._data.update(data)
+        if kwargs:
+            self._data.update(kwargs)
 
     def get(self, key: str, default: Any = None) -> Any:
         return self._data.get(key, default)
@@ -78,6 +80,11 @@ class AppConfig:
 
     def __contains__(self, key: str) -> bool:
         return key in self._data
+
+    def __getattr__(self, name: str) -> Any:
+        if name in self._data:
+            return self._data[name]
+        raise AttributeError(f"'AppConfig' object has no attribute '{name}'")
 
     def to_dict(self) -> Dict[str, Any]:
         return dict(self._data)

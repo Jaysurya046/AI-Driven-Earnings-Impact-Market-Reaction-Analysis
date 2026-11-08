@@ -29,12 +29,14 @@ AI-Driven Earnings Impact & Market Reaction Analysis/
 │   ├── sentiment_analysis.py              - Earnings news sentiment extraction (TextBlob / VADER)
 │   ├── streamlit_app.py                   - Interactive multi-tab exploratory research dashboard
 │   ├── lstm_models.py                     - Deep learning LSTM sequential reaction predictors
+│   ├── chart_data.py                      - Decoupled chart data preparation and metrics reshaping
 │   ├── utils.py                           - Modern pandas helpers (.ffill/.bfill), outlier & metric tools
 │   └── visualizations.py                  - High-resolution publication charting & reporting
 │
 ├── [AUTOMATED TEST SUITE - tests/]
 │   ├── test_api_server.py                 - FastAPI concurrency locks, background tasks & /predict tests
 │   ├── test_backtest_realism.py           - Friction testing (broker commission & slippage bps)
+│   ├── test_chart_data.py                 - Shared chart data preparation & statistical helper tests
 │   ├── test_config.py                     - Config precedence, type conversion & fallbacks
 │   ├── test_cv_and_scaling.py             - 95% CI cross-validation & unscaled tree model tests
 │   ├── test_data_collection.py            - MultiIndex flattening, timezone normalization & API retries
@@ -42,6 +44,7 @@ AI-Driven Earnings Impact & Market Reaction Analysis/
 │   ├── test_event_analysis.py             - Trading-day calendar mapping & CAR calculation tests
 │   ├── test_feature_definitions.py        - Canonical SAFE_FEATURE_COLUMNS integrity tests
 │   ├── test_feature_leakage.py            - Proves zero post-event return leakage into model inputs
+│   ├── test_lstm_models.py                - Deep learning availability, fallback, and ensemble bug tests
 │   ├── test_model_metadata.py             - Companion .json metadata persistence tests
 │   ├── test_packaging.py                  - PEP 517/621 packaging & top-level export validation
 │   ├── test_pipeline_in_memory.py         - In-memory DataFrame bus integration test
@@ -70,7 +73,7 @@ AI-Driven Earnings Impact & Market Reaction Analysis/
 │   └── earnings_analysis.ipynb            - Interactive exploratory research notebook
 │
 └── [GENERATED DIRECTORIES]
-    ├── data/                              - Cached market data & optional intermediate CSV snapshots
+    ├── data/                              - sector_mappings.json, cached market data & intermediate CSVs
     ├── models/                            - Trained model weights (.pkl) & companion metadata (.json)
     └── visualizations/                    - High-resolution analytical charts & summary reports
 ```

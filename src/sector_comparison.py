@@ -5,7 +5,9 @@ Analyzes and compares earnings impact across different market sectors
 
 import pandas as pd
 import numpy as np
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Union
+from pathlib import Path
+import json
 import logging
 
 logging.basicConfig(level=logging.INFO)
@@ -108,11 +110,34 @@ class SectorAnalyzer:
         'FCX': 'Materials',
         'NEM': 'Materials',
     }
-    
-    def __init__(self):
+
+    DEFAULT_MAPPING_FILE = Path("data") / "sector_mappings.json"
+
+    def __init__(self, mapping_path: Optional[Union[str, Path]] = None):
+        """
+        Initialize SectorAnalyzer with sector mapping file.
+
+        Args:
+            mapping_path: Optional path to JSON sector mapping dictionary.
+                          Defaults to data/sector_mappings.json.
+        """
+        self.mapping_path = Path(mapping_path) if mapping_path else self.DEFAULT_MAPPING_FILE
+        self.sector_mapping = self._load_sector_mapping()
         self.sector_data = None
         self.sector_metrics = None
-    
+
+    def _load_sector_mapping(self) -> Dict[str, str]:
+        """Load sector mapping from JSON data file with fallback to builtin dict."""
+        if self.mapping_path.exists():
+            try:
+                with open(self.mapping_path, "r", encoding="utf-8") as f:
+                    loaded = json.load(f)
+                    if isinstance(loaded, dict) and loaded:
+                        return {k.upper(): str(v) for k, v in loaded.items()}
+            except Exception as e:
+                logger.warning(f"Error loading sector mapping from {self.mapping_path}: {e}. Using fallback.")
+        return dict(self.SECTOR_MAPPING)
+
     def assign_sector(self, ticker: str) -> str:
         """
         Assign sector to a ticker
@@ -123,7 +148,7 @@ class SectorAnalyzer:
         Returns:
             Sector name
         """
-        return self.SECTOR_MAPPING.get(ticker.upper(), 'Other')
+        return self.sector_mapping.get(ticker.upper(), 'Other')
     
     def analyze_by_sector(self, event_analysis: pd.DataFrame) -> Dict:
         """

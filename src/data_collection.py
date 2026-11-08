@@ -3,6 +3,7 @@ Data Collection Module
 Fetches historical stock price data and earnings announcement information
 """
 
+import concurrent.futures
 import logging
 import time
 from datetime import datetime, timedelta
@@ -64,16 +65,18 @@ def retry_call(
 class DataCollector:
     """Collects historical stock price and earnings data"""
     
-    def __init__(self, lookback_years: int = 5, max_retries: int = 3):
+    def __init__(self, lookback_years: int = 5, max_retries: int = 3, max_workers: int = 5):
         """
         Initialize DataCollector
         
         Args:
             lookback_years: Years of historical data to fetch
             max_retries: Number of retries for API requests
+            max_workers: Maximum concurrent worker threads for multi-ticker data collection
         """
         self.lookback_years = lookback_years
         self.max_retries = max_retries
+        self.max_workers = max_workers
         self.end_date = datetime.now()
         self.start_date = self.end_date - timedelta(days=lookback_years * 365)
     
@@ -261,36 +264,51 @@ class DataCollector:
             logger.error(f"Error fetching earnings for {ticker}: {str(e)}")
             return pd.DataFrame(columns=['Date', 'EPS', 'Surprise_Percentage', 'Ticker'])
     
-    def fetch_multiple_stocks(self, tickers: List[str]) -> Tuple[pd.DataFrame, pd.DataFrame]:
+    def fetch_multiple_stocks(
+        self,
+        tickers: List[str],
+        max_workers: Optional[int] = None
+    ) -> Tuple[pd.DataFrame, pd.DataFrame]:
         """
-        Fetch data for multiple stocks
+        Fetch price and earnings data for multiple stocks concurrently.
         
         Args:
             tickers: List of stock ticker symbols
+            max_workers: Optional worker thread count override (defaults to self.max_workers)
             
         Returns:
             Tuple of (price_data_df, earnings_data_df)
         """
-        all_price_data = []
-        all_earnings_data = []
-        
-        for ticker in tickers:
+        if not tickers:
+            return (
+                pd.DataFrame(columns=['Date', 'Open', 'High', 'Low', 'Close', 'Adj Close', 'Volume', 'Ticker']),
+                pd.DataFrame(columns=['Date', 'EPS', 'Surprise_Percentage', 'Ticker'])
+            )
+
+        workers = max_workers if max_workers is not None else self.max_workers
+        workers = max(1, min(workers, len(tickers)))
+
+        def _fetch_single(ticker: str) -> Tuple[pd.DataFrame, pd.DataFrame]:
             price_data = self.fetch_stock_price_data(ticker)
             earnings_data = self.fetch_earnings_dates(ticker)
-            
-            if not price_data.empty:
-                all_price_data.append(price_data)
-            
-            if not earnings_data.empty:
-                all_earnings_data.append(earnings_data)
-        
+            return price_data, earnings_data
+
+        if workers == 1 or len(tickers) == 1:
+            results = [_fetch_single(t) for t in tickers]
+        else:
+            with concurrent.futures.ThreadPoolExecutor(max_workers=workers) as executor:
+                results = list(executor.map(_fetch_single, tickers))
+
+        all_price_data = [p for p, _ in results if not p.empty]
+        all_earnings_data = [e for _, e in results if not e.empty]
+
         price_df = pd.concat(all_price_data, ignore_index=True) if all_price_data else pd.DataFrame(
             columns=['Date', 'Open', 'High', 'Low', 'Close', 'Adj Close', 'Volume', 'Ticker']
         )
         earnings_df = pd.concat(all_earnings_data, ignore_index=True) if all_earnings_data else pd.DataFrame(
             columns=['Date', 'EPS', 'Surprise_Percentage', 'Ticker']
         )
-        
+
         return price_df, earnings_df
     
     @staticmethod

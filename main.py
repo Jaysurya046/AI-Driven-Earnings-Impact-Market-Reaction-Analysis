@@ -7,7 +7,7 @@ import pandas as pd
 import numpy as np
 from pathlib import Path
 import logging
-from typing import Tuple, List, Optional
+from typing import Any, Dict, List, Optional, Tuple, Union
 
 from src.data_collection import DataCollector
 from src.event_analysis import EventAnalyzer
@@ -25,17 +25,21 @@ logger = logging.getLogger(__name__)
 class EarningsAnalysisPipeline:
     """Main orchestration class for the complete analysis workflow"""
     
-    def __init__(self, config: dict):
+    def __init__(self, config: Any):
         """
         Initialize pipeline
         
         Args:
-            config: Configuration dictionary with settings
+            config: Configuration dictionary or AppConfig instance
         """
-        self.config = config
-        self.data_dir = Path(config.get('data_dir', 'data'))
-        self.models_dir = Path(config.get('models_dir', 'models'))
-        self.viz_dir = Path(config.get('viz_dir', 'visualizations'))
+        if hasattr(config, 'to_dict'):
+            self.config = config.to_dict()
+        else:
+            self.config = dict(config)
+
+        self.data_dir = Path(self.config.get('data_dir', 'data'))
+        self.models_dir = Path(self.config.get('models_dir', 'models'))
+        self.viz_dir = Path(self.config.get('viz_dir', 'visualizations'))
         
         # Create directories if they don't exist
         self.data_dir.mkdir(exist_ok=True)
@@ -43,10 +47,13 @@ class EarningsAnalysisPipeline:
         self.viz_dir.mkdir(exist_ok=True)
         
         # Initialize components
-        self.data_collector = DataCollector(lookback_years=config.get('lookback_years', 5))
+        self.data_collector = DataCollector(
+            lookback_years=self.config.get('lookback_years', 5),
+            max_workers=self.config.get('max_workers', 5)
+        )
         self.event_analyzer = EventAnalyzer(
-            event_window=config.get('event_window', 5),
-            estimation_window=config.get('estimation_window', 60)
+            event_window=self.config.get('event_window', 5),
+            estimation_window=self.config.get('estimation_window', 60)
         )
         self.feature_engineer = FeatureEngineer()
         self.model_trainer = ModelTrainer()
@@ -228,8 +235,36 @@ class EarningsAnalysisPipeline:
         logger.info(f"Test set size: {len(X_test)}")
         logger.info(f"Features used: {len(feature_columns)}")
         
-        # Train models in memory
-        model_comparison = self.model_trainer.train_all_models(X_train, X_test, y_train, y_test)
+        # Train configured models in memory
+        models_to_train = self.config.get('models_to_train')
+        model_comparison = self.model_trainer.train_all_models(
+            X_train, X_test, y_train, y_test, models_to_train=models_to_train
+        )
+
+        # Optional deep learning LSTM training
+        if self.config.get('enable_lstm', False):
+            try:
+                from src.lstm_models import LSTMPredictor
+                if LSTMPredictor.is_available():
+                    logger.info("Training optional deep learning LSTM predictor...")
+                    lstm = LSTMPredictor(sequence_length=10, lstm_units=50)
+                    lstm.train(X_train, y_train, epochs=20, batch_size=32)
+                    lstm_metrics = lstm.evaluate(X_test, y_test)
+                    if lstm_metrics:
+                        lstm_row = pd.DataFrame([{
+                            'Model': 'LSTM',
+                            'Accuracy': lstm_metrics.get('Accuracy', np.nan),
+                            'Precision': lstm_metrics.get('Precision', np.nan),
+                            'Recall': lstm_metrics.get('Recall', np.nan),
+                            'F1-Score': lstm_metrics.get('F1-Score', np.nan),
+                            'AUC-ROC': lstm_metrics.get('AUC-ROC', np.nan)
+                        }])
+                        model_comparison = pd.concat([model_comparison, lstm_row], ignore_index=True)
+                else:
+                    logger.warning("enable_lstm is True, but TensorFlow is not installed. Install via: pip install .[deeplearning]")
+            except Exception as e:
+                logger.warning(f"Optional LSTM training failed: {e}")
+
         self.model_comparison = model_comparison
         
         if self.save_intermediate:
@@ -402,36 +437,78 @@ class EarningsAnalysisPipeline:
                 f.write(report_text)
         
         logger.info(report_text)
-        
-        return report_text
-        
-        logger.info(report_text)
-        
         return report_text
     
+    def run_pipeline(
+        self,
+        tickers: List[str],
+        generate_visualizations: bool = True,
+        generate_report: bool = True
+    ) -> Dict[str, Any]:
+        """
+        Execute unified analysis pipeline and return in-memory artifacts.
+
+        Args:
+            tickers: List of stock tickers to analyze
+            generate_visualizations: Whether to render and save visualization plots
+            generate_report: Whether to synthesize insights report
+
+        Returns:
+            Dictionary containing pipeline instance and generated artifacts
+        """
+        logger.info("STARTING EARNINGS IMPACT ANALYSIS PIPELINE")
+        logger.info(f"Analyzing: {', '.join(tickers)}")
+
+        # Execute all steps passing in-memory DataFrames
+        prices, earnings = self.step_1_collect_data(tickers)
+        event_analysis = self.step_2_event_analysis(prices, earnings)
+        features, labels = self.step_3_feature_engineering(event_analysis)
+        model_comparison = self.step_4_train_models(features, labels)
+
+        if generate_visualizations:
+            self.step_5_visualizations(event_analysis, model_comparison)
+
+        report_text = None
+        if generate_report:
+            report_text = self.step_6_insights_report(event_analysis, model_comparison)
+
+        logger.info("\n" + "=" * 80)
+        logger.info("PIPELINE COMPLETED SUCCESSFULLY")
+        logger.info("=" * 80)
+
+        return {
+            'pipeline': self,
+            'price_data': prices,
+            'earnings_data': earnings,
+            'event_analysis': event_analysis,
+            'features': features,
+            'labels': labels,
+            'model_trainer': self.model_trainer,
+            'model_comparison': model_comparison,
+            'report': report_text
+        }
+
+    def run_for_api(self, tickers: List[str]) -> Dict[str, Any]:
+        """
+        Execute pipeline tailored for API server usage (omits filesystem plotting).
+
+        Args:
+            tickers: List of tickers to analyze
+
+        Returns:
+            Dictionary with DataFrames and models required by API state manager
+        """
+        return self.run_pipeline(tickers, generate_visualizations=False, generate_report=True)
+
     def run_complete_pipeline(self, tickers: List[str]) -> None:
         """
-        Run the complete analysis pipeline
+        Run the complete analysis pipeline (CLI mode).
         
         Args:
             tickers: List of stock tickers to analyze
         """
         try:
-            logger.info("STARTING EARNINGS IMPACT ANALYSIS PIPELINE")
-            logger.info(f"Analyzing: {', '.join(tickers)}")
-            
-            # Execute all steps passing in-memory DataFrames
-            prices, earnings = self.step_1_collect_data(tickers)
-            event_analysis = self.step_2_event_analysis(prices, earnings)
-            features, labels = self.step_3_feature_engineering(event_analysis)
-            model_comparison = self.step_4_train_models(features, labels)
-            self.step_5_visualizations(event_analysis, model_comparison)
-            self.step_6_insights_report(event_analysis, model_comparison)
-            
-            logger.info("\n" + "=" * 80)
-            logger.info("PIPELINE COMPLETED SUCCESSFULLY")
-            logger.info("=" * 80)
-            
+            self.run_pipeline(tickers, generate_visualizations=True, generate_report=True)
         except Exception as e:
             logger.error(f"Pipeline failed with error: {str(e)}", exc_info=True)
             raise

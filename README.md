@@ -4,7 +4,7 @@ A quantitative, production-grade system that analyzes equity price behavior arou
 
 [![CI](https://github.com/Jaysurya046/ai-earnings-impact-analysis/actions/workflows/ci.yml/badge.svg)](https://github.com/Jaysurya046/ai-earnings-impact-analysis/actions/workflows/ci.yml)
 [![Python Version](https://img.shields.io/badge/python-3.9%20%7C%203.10%20%7C%203.11%20%7C%203.12%20%7C%203.13-blue)](pyproject.toml)
-[![Tests](https://img.shields.io/badge/tests-69%20passed-brightgreen)](tests/)
+[![Tests](https://img.shields.io/badge/tests-86%20passed-brightgreen)](tests/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
 ---
@@ -142,9 +142,12 @@ Features:
 ### 3. REST API Server (FastAPI)
 Start the high-throughput, thread-safe asynchronous prediction server:
 ```bash
-uvicorn api_server:app --host 0.0.0.0 --port 8000 --reload
+uvicorn api_server:app --host 0.0.0.0 --port 8000 --workers 1
 ```
 Interactive OpenAPI documentation will be accessible at `http://localhost:8000/docs`.
+
+> [!NOTE]
+> **Single-Worker Execution (`--workers 1`)**: The FastAPI server relies on an in-memory `AnalysisStateManager` with `asyncio.Lock` for atomic task management and global state synchronization. Running multi-process workers (`--workers > 1` or `WEB_CONCURRENCY > 1`) is actively detected and blocked via runtime guard (`enforce_single_worker_environment()`) to guarantee state consistency across all requests.
 
 Key Endpoints:
 - `GET /health`: Service health and model status

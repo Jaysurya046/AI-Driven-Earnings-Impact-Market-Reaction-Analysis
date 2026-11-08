@@ -4,6 +4,8 @@ Provides thread-safe REST API endpoints for model predictions, background analys
 """
 
 import asyncio
+import os
+import sys
 from datetime import datetime, timezone
 import logging
 from pathlib import Path
@@ -23,11 +25,51 @@ logger = logging.getLogger(__name__)
 
 config = load_config()
 
+
+def enforce_single_worker_environment() -> None:
+    """Enforce single-worker deployment for in-memory AnalysisStateManager.
+
+    FastAPI with an in-memory state manager requires single-worker execution
+    (e.g., uvicorn --workers 1) to prevent distributed state divergence, race conditions,
+    and multiple concurrent analysis tasks running across detached process workers.
+
+    Raises:
+        RuntimeError: If multi-worker configuration (WEB_CONCURRENCY > 1 or --workers > 1) is detected.
+    """
+    web_concurrency = os.environ.get("WEB_CONCURRENCY")
+    if web_concurrency and int(web_concurrency) > 1:
+        raise RuntimeError(
+            f"AnalysisStateManager requires single-worker execution (workers=1), "
+            f"but WEB_CONCURRENCY={web_concurrency} was detected. In-memory state cannot "
+            f"be shared across multiple worker processes. Deploy with '--workers 1'."
+        )
+
+    for i, arg in enumerate(sys.argv):
+        if arg in ("--workers", "-w") and i + 1 < len(sys.argv):
+            try:
+                workers_arg = int(sys.argv[i + 1])
+                if workers_arg > 1:
+                    raise RuntimeError(
+                        f"AnalysisStateManager requires single-worker execution (workers=1), "
+                        f"but '--workers {workers_arg}' was provided. In-memory state cannot "
+                        f"be shared across multiple worker processes. Run with '--workers 1'."
+                    )
+            except ValueError:
+                pass
+
+
 app = FastAPI(
     title="Earnings Impact Analysis API",
     description="REST API for earnings impact prediction and analysis",
     version="1.0.0"
 )
+
+
+@app.on_event("startup")
+async def startup_event():
+    """Verify single-worker deployment constraint on server startup."""
+    enforce_single_worker_environment()
+    logger.info("API server initialized in verified single-worker deployment mode.")
 
 # Secure CORS configuration:
 # When allow_origins contains "*", allow_credentials MUST be False according to CORS specification.
@@ -131,18 +173,7 @@ def _execute_pipeline_sync(task_id: str, tickers: List[str], lookback_years: int
     }
 
     pipeline = EarningsAnalysisPipeline(pipeline_cfg)
-    price_data, earnings_data = pipeline.step_1_collect_data(tickers)
-    event_analysis = pipeline.step_2_event_analysis()
-    features, labels = pipeline.step_3_feature_engineering()
-    model_comparison = pipeline.step_4_train_models()
-
-    return {
-        'pipeline': pipeline,
-        'event_analysis': event_analysis,
-        'features': features,
-        'model_trainer': pipeline.model_trainer,
-        'model_comparison': model_comparison,
-    }
+    return pipeline.run_for_api(tickers)
 
 
 async def _background_task_wrapper(task_id: str, tickers: List[str], lookback_years: int, event_window: int):
@@ -476,5 +507,11 @@ async def get_metrics():
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run(app, host=config.get('api_host', '0.0.0.0'), port=config.get('api_port', 8000))
+    enforce_single_worker_environment()
+    uvicorn.run(
+        app,
+        host=config.get('api_host', '0.0.0.0'),
+        port=config.get('api_port', 8000),
+        workers=1
+    )
 

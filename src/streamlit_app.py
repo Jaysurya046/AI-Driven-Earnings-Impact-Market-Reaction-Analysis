@@ -18,6 +18,11 @@ from src.event_analysis import EventAnalyzer
 from src.feature_engineering import FeatureEngineer
 from src.ml_models import ModelTrainer
 from src.visualizations import Visualizer
+from src.chart_data import (
+    prepare_surprise_vs_reaction_data,
+    prepare_model_comparison_data,
+    prepare_volatility_analysis_data,
+)
 
 
 # Page configuration
@@ -283,28 +288,20 @@ def display_overview_dashboard(results: Dict):
     col1, col2 = st.columns(2)
     
     with col1:
-        # Volatility analysis
-        vol_data = event_analysis[['Ticker', 'PreEventVolatility', 'PostEventVolatility']].copy()
-        vol_data_melted = vol_data.melt(
-            id_vars=['Ticker'],
-            value_vars=['PreEventVolatility', 'PostEventVolatility'],
-            var_name='Period',
-            value_name='Volatility'
-        )
-        vol_data_melted['Period'] = vol_data_melted['Period'].map({
-            'PreEventVolatility': 'Pre-Event',
-            'PostEventVolatility': 'Post-Event'
-        })
-        
-        fig_vol = px.box(
-            vol_data_melted,
-            x='Period',
-            y='Volatility',
-            color='Period',
-            title='Volatility: Pre vs Post Event',
-            labels={'Volatility': 'Volatility (%)'}
-        )
-        st.plotly_chart(fig_vol, use_container_width=True)
+        # Volatility analysis using shared data-preparation helper
+        prep_vol = prepare_volatility_analysis_data(event_analysis)
+        vol_data_melted = prep_vol['melted_df']
+
+        if not vol_data_melted.empty:
+            fig_vol = px.box(
+                vol_data_melted,
+                x='Period',
+                y='Volatility',
+                color='Period',
+                title='Volatility: Pre vs Post Event',
+                labels={'Volatility': 'Volatility (%)'}
+            )
+            st.plotly_chart(fig_vol, use_container_width=True)
     
     with col2:
         # Volume analysis
@@ -323,16 +320,16 @@ def display_model_performance(results: Dict):
     st.header("🤖 Machine Learning Model Performance")
     
     model_comparison = results['model_comparison']
-    
+    prep_mc = prepare_model_comparison_data(model_comparison)
+
     # Model comparison table
     st.subheader("Model Comparison Metrics")
-    display_df = model_comparison[['Model', 'Accuracy', 'Precision', 'Recall', 'F1-Score', 'AUC-ROC']].copy()
-    display_df = display_df.round(4)
-    st.dataframe(display_df, use_container_width=True)
-    
+    st.dataframe(prep_mc['display_df'], use_container_width=True)
+
     # Best model highlight
-    best_model = model_comparison.loc[model_comparison['F1-Score'].idxmax()]
-    st.success(f"🏆 Best Performing Model: **{best_model['Model']}** (F1-Score: {best_model['F1-Score']:.4f})")
+    best_model = prep_mc['best_model']
+    if best_model:
+        st.success(f"🏆 Best Performing Model: **{best_model['Model']}** (F1-Score: {best_model['F1-Score']:.4f})")
     
     # Model performance chart
     col1, col2 = st.columns(2)
