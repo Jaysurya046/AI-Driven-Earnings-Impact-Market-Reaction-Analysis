@@ -167,10 +167,15 @@ class SectorAnalyzer:
         sector_summary['VolatilityChange'] = (
             sector_summary['AvgPostVol'] - sector_summary['AvgPreVol']
         )
-        sector_summary['WinRate'] = data.groupby('Sector').apply(
+        sector_summary['WinRate'] = data.groupby('Sector', observed=False).apply(
             lambda x: (x['PostEventReturn'] > 0).sum() / len(x)
         ).values
-        sector_summary['AvgSurpriseMagnitude'] = data.groupby('Sector')['SurprisePercentage'].abs().mean().values
+        sector_summary['AvgSurpriseMagnitude'] = (
+            data.assign(AbsSurprise=data['SurprisePercentage'].abs())
+            .groupby('Sector', observed=False)['AbsSurprise']
+            .mean()
+            .values
+        )
         
         self.sector_metrics = sector_summary
         
