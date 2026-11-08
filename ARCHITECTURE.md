@@ -5,666 +5,252 @@
 ### High-Level Overview
 
 ```
-┌─────────────────────────────────────────────────────────────┐
-│                 EARNINGS ANALYSIS SYSTEM                    │
-├─────────────────────────────────────────────────────────────┤
-│                                                              │
-│  ┌────────────────┐  ┌──────────────────┐  ┌────────────┐  │
-│  │  Data Layer    │  │  Analysis Layer  │  │  ML Layer  │  │
-│  ├────────────────┤  ├──────────────────┤  ├────────────┤  │
-│  │                │  │                  │  │            │  │
-│  │ • Yahoo API    │  │ • Event Window   │  │ • Feature  │  │
-│  │ • CSV Storage  │  │ • Return Calc    │  │   Engineer │  │
-│  │ • SQL Ready    │  │ • Abnormal Ret   │  │ • Training │  │
-│  │                │  │ • CAR Compute    │  │ • Eval     │  │
-│  │                │  │ • Vol/Vol Analy  │  │            │  │
-│  └────────────────┘  └──────────────────┘  └────────────┘  │
-│         │                    │                    │          │
-│         └────────────────────┴────────────────────┘          │
-│                         │                                    │
-│                         v                                    │
-│              ┌────────────────────────┐                     │
-│              │  Visualization Layer   │                     │
-│              ├────────────────────────┤                     │
-│              │ • Matplotlib/Seaborn   │                     │
-│              │ • Dashboard Charts     │                     │
-│              │ • Interactive Plots    │                     │
-│              └────────────────────────┘                     │
-│                         │                                    │
-│                         v                                    │
-│         ┌──────────────────────────────────┐               │
-│         │      Output & Reporting Layer    │               │
-│         ├──────────────────────────────────┤               │
-│         │ • CSV/Database Export           │               │
-│         │ • Model Serialization           │               │
-│         │ • Report Generation             │               │
-│         │ • Dashboard Export              │               │
-│         └──────────────────────────────────┘               │
-│                                                              │
-└─────────────────────────────────────────────────────────────┘
+┌────────────────────────────────────────────────────────────────────────────────────────┐
+│                        AI-DRIVEN EARNINGS IMPACT ANALYSIS PLATFORM                     │
+├────────────────────────────────────────────────────────────────────────────────────────┤
+│                                                                                        │
+│  ┌───────────────────────┐  ┌─────────────────────────┐  ┌─────────────────────────┐  │
+│  │   Configuration &     │  │   Data Ingestion &      │  │    Event Study Engine   │  │
+│  │   Secrets Management  │  │   Hardening Layer       │  │    (Trading-Day Exact)  │  │
+│  ├───────────────────────┤  ├─────────────────────────┤  ├─────────────────────────┤  │
+│  │ • Unified load_config │  │ • yfinance connector    │  │ • Trading-day offsets   │  │
+│  │ • config.ini + .env   │  │ • MultiIndex flattening │  │ • Estimation (-60:-10)  │  │
+│  │ • OS Env Overrides    │  │ • Timezone normalization│  │ • Event window [-5:+5]  │  │
+│  │ • Sensitive Masking   │  │ • Exponential backoff   │  │ • Mean-adjusted AR      │  │
+│  │ • .env.example / git  │  │ • Shape validation gates│  │ • CAR calculation       │  │
+│  └───────────────────────┘  └─────────────────────────┘  └─────────────────────────┘  │
+│              │                           │                            │                │
+│              └───────────────────────────┼────────────────────────────┘                │
+│                                          v                                             │
+│                       ┌─────────────────────────────────────┐                          │
+│                       │   In-Memory Pipeline DataFrame Bus  │                          │
+│                       │   (Optional CSV File Checkpointing) │                          │
+│                       └─────────────────────────────────────┘                          │
+│                                          │                                             │
+│         ┌────────────────────────────────┼────────────────────────────────┐            │
+│         v                                v                                v            │
+│  ┌───────────────────────┐  ┌─────────────────────────┐  ┌─────────────────────────┐  │
+│  │  Feature Engineering  │  │   Machine Learning &    │  │   Realistic Quantitative│  │
+│  │  (Zero Data Leakage)  │  │   Model Calibration     │  │   Backtesting Engine    │  │
+│  ├───────────────────────┤  ├─────────────────────────┤  ├─────────────────────────┤  │
+│  │ • SAFE_FEATURE_COLUMNS│  │ • Logistic Regression   │  │ • Commission modeling   │  │
+│  │ • Strict pre-event    │  │ • Random Forest         │  │ • Slippage friction(bps)│  │
+│  │ • No post-return leak │  │ • XGBoost (unscaled)    │  │ • Next-day open exec    │  │
+│  │ • TimeSeriesSplit     │  │ • 95% CI Cross-Val      │  │ • Momentum & Reversion  │  │
+│  │ • Chronological order │  │ • Hyperparameter tuning │  │ • Sharpe / Max Drawdown │  │
+│  │ • Feature importance  │  │ • Probability Calib     │  │ • Portfolio equity curve│  │
+│  └───────────────────────┘  └─────────────────────────┘  └─────────────────────────┘  │
+│                                          │                                             │
+│         ┌────────────────────────────────┴────────────────────────────────┐            │
+│         v                                                                 v            │
+│  ┌───────────────────────────────┐                             ┌───────────────────┐  │
+│  │   Thread-Safe REST API        │                             │  Visualization &  │  │
+│  │   (FastAPI + Async Workers)   │                             │  Analytics UI     │  │
+│  ├───────────────────────────────┤                             ├───────────────────┤  │
+│  │ • AnalysisStateManager        │                             │ • Streamlit tabs  │  │
+│  │ • asyncio.Lock state guard    │                             │ • Matplotlib / SNS│  │
+│  │ • Background worker tasks     │                             │ • Interactive     │  │
+│  │ • Sanitized JSON floats       │                             │   Scatter/Heatmaps│  │
+│  │ • Secured CORS origins        │                             │ • Automated report│  │
+│  └───────────────────────────────┘                             └───────────────────┘  │
+│                                                                                        │
+│  ┌──────────────────────────────────────────────────────────────────────────────────┐  │
+│  │                            Artifact & Metadata Store                             │  │
+│  │ • Serialized Models (.pkl)        • Companion Metadata (.json)                   │  │
+│  │ • Feature Columns Registry        • Pinned Dependencies (requirements-lock.txt)  │  │
+│  └──────────────────────────────────────────────────────────────────────────────────┘  │
+└────────────────────────────────────────────────────────────────────────────────────────┘
 ```
-
-## Module Breakdown
-
-### 1. Data Collection Module (`data_collection.py`)
-
-**Purpose**: Fetch and store market data
-
-**Key Classes**:
-```python
-class DataCollector:
-    def __init__(lookback_years)
-    def fetch_stock_price_data(ticker) -> DataFrame
-    def fetch_earnings_dates(ticker) -> DataFrame
-    def fetch_multiple_stocks(tickers) -> Tuple[DataFrame, DataFrame]
-    def save_to_csv(df, filepath) -> None
-```
-
-**Data Flow**:
-```
-Yahoo Finance API
-      |
-      v
-yfinance Library
-      |
-      v
-DataCollector
-      |
-      +---> Validates data
-      |
-      +---> Formats columns
-      |
-      +---> Combines tickers
-      |
-      v
-CSV Files
-```
-
-**Output Columns**:
-- Price data: Date, Open, High, Low, Close, Adj Close, Volume, Ticker
-- Earnings data: Date, EPS, Surprise_Percentage, Ticker
 
 ---
 
-### 2. Event Analysis Module (`event_analysis.py`)
+## Detailed Module Architecture
 
-**Purpose**: Analyze price movements around earnings events
+### 1. Unified Configuration & Secrets (`src/config.py`)
+
+**Purpose**: Centralize configuration management with strict priority inheritance and secrets masking.
+
+**Order of Precedence**:
+1. Environment variables (`APP_*` or bare names) — highest priority.
+2. `.env` file variables (loaded via `python-dotenv`).
+3. `config.ini` settings.
+4. Hardcoded `DEFAULT_CONFIG` fallbacks — lowest priority.
+
+**Key API**:
+```python
+class AppConfig:
+    def get(key: str, default: Any = None) -> Any
+    def to_dict() -> Dict[str, Any]
+    def __repr__() -> str  # Automatically masks secret tokens
+
+def load_config(config_file=None, env_file=None, env_prefix="APP_") -> AppConfig
+def mask_secrets(config_dict: Dict[str, Any]) -> Dict[str, Any]
+```
+
+---
+
+### 2. Data Collection & Hardening (`src/data_collection.py`)
+
+**Purpose**: Resilient market data ingestion from Yahoo Finance with automated anomaly handling.
+
+**Key Classes & Functions**:
+```python
+class DataCollector:
+    def __init__(lookback_years: int = 5, max_retries: int = 3, retry_delay: float = 1.0)
+    def fetch_stock_price_data(ticker: str) -> pd.DataFrame
+    def fetch_earnings_dates(ticker: str) -> pd.DataFrame
+    def fetch_multiple_stocks(tickers: List[str]) -> Tuple[pd.DataFrame, pd.DataFrame]
+    
+    @staticmethod
+    def validate_collected_data(price_df, earnings_df, min_price_records=10, min_earnings_records=1) -> None
+```
+
+**Robustness Features**:
+- **MultiIndex Flattening**: Seamlessly extracts OHLCV columns whether returned as single or MultiIndex data.
+- **Date Normalization**: Strips timezone offsets (`tz_localize(None)`) to ensure perfect alignment with market holidays and weekend earnings reports.
+- **Future Date Filtering**: Discards future announcement estimates where actual EPS data has not yet occurred.
+- **Exponential Backoff**: Retries failed network calls with geometric delay increments.
+- **Immediate Validation**: Checks non-emptiness, required schemas, and ticker overlap before passing DataFrames downstream.
+
+---
+
+### 3. Event Study Analysis (`src/event_analysis.py`)
+
+**Purpose**: Quantify equity market reaction using trading-day event studies and Cumulative Abnormal Returns (CAR).
 
 **Key Classes**:
 ```python
 class EventAnalyzer:
-    def __init__(event_window, estimation_window)
-    def calculate_returns(prices) -> Series
-    def calculate_abnormal_returns(event_prices, estimation_prices) -> Series
-    def calculate_cumulative_abnormal_returns(abnormal_returns) -> Series
-    def analyze_event_window(price_data, earnings_date, ticker) -> Dict
-    def analyze_multiple_events(price_data, earnings_data) -> DataFrame
+    def __init__(event_window: int = 5, estimation_window: int = 60)
+    def analyze_event_window(price_data: pd.DataFrame, earnings_date: datetime, ticker: str) -> Dict
+    def analyze_multiple_events(price_data: pd.DataFrame, earnings_data: pd.DataFrame) -> pd.DataFrame
 ```
 
-**Calculations**:
-
-1. **Daily Returns**: 
-   ```
-   Return_t = (Price_t - Price_{t-1}) / Price_{t-1} * 100
-   ```
-
-2. **Expected Return** (from estimation window):
-   ```
-   Expected_Return = Mean(Returns_{-60 to -10})
-   ```
-
-3. **Abnormal Return**:
-   ```
-   Abnormal_Return = Actual_Return - Expected_Return
-   ```
-
-4. **CAR** (Cumulative Abnormal Return):
-   ```
-   CAR = (1 + AR_1/100) * (1 + AR_2/100) * ... * (1 + AR_n/100) - 1
-   ```
-
-5. **Volatility** (Standard Deviation):
-   ```
-   Volatility = StdDev(Daily_Returns)
-   ```
-
-**Output Features**:
-- PreEventReturn: Return from day -5 to day -1
-- PostEventReturn: Return from day +1 to day +5
-- AbnormalReturnCAR: CAR across ±5 day window
-- PreEventVolatility: Volatility pre-event
-- PostEventVolatility: Volatility post-event
-- VolumeSpikeRatio: Post event volume / estimation volume
+**Methodology**:
+1. **Trading-Day Indexing**: Uses exact trading days rather than calendar intervals. If an earnings release occurs on a weekend or post-market, the announcement event day ($t=0$) is mapped to the immediate subsequent trading session.
+2. **Estimation Window**: Historical window ($[-60, -10]$ trading days) computes baseline expected return $\bar{R}_{\text{est}}$ and historical volatility $\sigma_{\text{est}}$.
+3. **Abnormal Return ($AR_t$)**:
+   $$\text{AR}_t = R_t - \bar{R}_{\text{est}}$$
+4. **Cumulative Abnormal Return (CAR)**:
+   $$\text{CAR} = \sum_{t=-w}^{+w} \text{AR}_t$$
+5. **Volatility & Volume Shifts**: Computes pre-event vs post-event standard deviations and volume spike ratios.
 
 ---
 
-### 3. Feature Engineering Module (`feature_engineering.py`)
+### 4. Feature Engineering & Leakage Isolation (`src/feature_engineering.py`)
 
-**Purpose**: Create ML-ready features and labels
+**Purpose**: Generate predictive ML features strictly from pre-announcement data, preventing look-ahead bias.
 
-**Key Classes**:
+**Single Source of Truth**:
+- `SAFE_FEATURE_COLUMNS`: Canonical list of approved model input features.
+- `LEAKY_COLUMNS`: Prohibited columns derived from post-announcement data (`PostEventReturn`, `PostEventVolatility`, `PostEventVolume`).
+- `NON_FEATURE_COLUMNS`: Identifiers and metadata stripped before training (`Date`, `Ticker`, `Sector`).
+
+**Feature Set**:
+1. **Earnings Surprise**: `EarningsSurpriseAbs`, `EarningsSurpriseDirection`, `SurprisePercentage`.
+2. **Pre-Event Volatility**: `PreEventVolatility`, `VolatilityRatio` ($\sigma_{\text{pre}} / \sigma_{\text{est}}$).
+3. **Volume Dynamics**: `VolumeSpikeRatio` ($\text{Vol}_{\text{pre}} / \text{Vol}_{\text{est}}$), `VolumeAnomalous`.
+4. **Pre-Event Momentum**: `PreEventMomentum` (return over days $[-5, -1]$), `PriceTrend_20D`.
+5. **Safe Interactions**: `SurpriseVolatilityInteraction`, `PreEventVol_SurpriseInteraction`.
+
+**Chronological Splitting**:
 ```python
-class FeatureEngineer:
-    def create_features(event_analysis_df) -> DataFrame
-    def create_labels(event_analysis_df, pos_threshold, neg_threshold) -> Series
-    def create_binary_labels(event_analysis_df, threshold) -> Series
-    def prepare_train_test_data(features, labels, feature_columns, 
-                                test_size, random_state) -> Tuple
-    def get_feature_importance_df(model, feature_columns) -> DataFrame
-```
-
-**Features Created (Strict Pre-Announcement Integrity)**:
-
-1. **Surprise Features**:
-   - EarningsSurpriseAbs: |Reported EPS - Expected EPS|
-   - EarningsSurpriseDirection: Sign(Surprise)
-
-2. **Volatility Features**:
-   - PreEventVolatility: Historical volatility prior to announcement
-   - VolatilityChangeRatio: PostVol / EstimationVol
-   - VolatilityIncrease: PostVol - EstimationVol
-
-3. **Volume Features**:
-   - VolumeSpikeRatio: PostVolume / EstimationVolume
-   - VolumeAnomalous: 1 if Ratio > 1.5, else 0
-
-4. **Momentum Features**:
-   - PreEventMomentum: Pre-event historical return
-   - PriceTrend_20D: Short-term historical momentum prior to announcement
-
-5. **Safe Interaction Features**:
-   - SurpriseVolatilityInteraction: Surprise × VolRatio
-   - PreEventVol_SurpriseInteraction: Pre-event Volatility × EPS Surprise
-
-> **Note on Data Leakage Prevention**: Features derived from post-announcement prices/returns (such as `PostEventMomentum` or `PreVol_PostReturn`) are strictly prohibited and stripped out via `SAFE_FEATURE_COLUMNS` and `LEAKY_COLUMNS` to ensure realistic, uncompromised model evaluation.
-
-**Label Creation**:
-```python
-if PostEventReturn > threshold:
-    Label = 1  # Positive reaction
-else:
-    Label = 0  # Negative reaction
-```
-
-**Train-Test Split (Chronological Order)**:
-```
-All Events (N, sorted by Date ascending)
-   |
-   +---> Training Set (Earliest 80%) [No look-ahead bias]
-   |
-   +---> Test Set (Latest 20%)
-```
-
----
-
-### 4. ML Models Module (`ml_models.py`)
-
-**Purpose**: Train, tune, calibrate, and evaluate classification models with metadata persistence
-
-**Key Classes & Capabilities**:
-```python
-class ModelTrainer:
-    def train_logistic_regression(X_train, y_train) -> Tuple[Model, Scaler]
-    def train_random_forest(X_train, y_train) -> Model
-    def train_xgboost(X_train, y_train, scale_features=False) -> Tuple[Model, Optional[Scaler]]
-    def evaluate_model(model, X_test, y_test, scaler, model_name) -> Dict
-    def evaluate_cv(model, X, y, cv=5) -> Dict  # Cross-validation with 95% CI
-    def tune_hyperparameters(model_name, X_train, y_train, cv=3) -> Tuple[Model, Dict]
-    def calibrate_probabilities(model, X_val, y_val, scaler) -> CalibratedClassifierCV
-    def save_model(model_name, filepath, feature_columns=None, metadata=None) -> None  # Saves .pkl and companion .json
-    def load_model(filepath, model_name) -> Dict  # Loads model and associated metadata
-```
-
-**Models**:
-
-1. **Logistic Regression**
-   - Type: Linear classifier
-   - Scaling: Required (StandardScaler)
-   - Pros: Fast, interpretable
-   - Cons: May underfit on complex patterns
-
-2. **Random Forest**
-   - Type: Ensemble tree-based
-   - Scaling: Not required
-   - Pros: Captures non-linear patterns, feature importance
-   - Cons: Prone to overfitting
-
-3. **XGBoost**
-   - Type: Gradient boosting
-   - Scaling: Recommended
-   - Pros: State-of-the-art performance
-   - Cons: More complex, longer training
-
-**Evaluation Metrics**:
-
-```python
-Accuracy = (TP + TN) / (TP + TN + FP + FN)
-Precision = TP / (TP + FP)
-Recall = TP / (TP + FN)
-F1-Score = 2 * (Precision × Recall) / (Precision + Recall)
-AUC-ROC = Area under receiver operating characteristic curve
-```
-
-**Model Comparison**:
-```
-Model             Accuracy  Precision  Recall  F1-Score  AUC-ROC
-─────────────────────────────────────────────────────────────────
-Logistic Reg      0.6201    0.6124    0.5987   0.6054   0.6789
-Random Forest     0.6543    0.6421    0.6234   0.6326   0.7123
-XGBoost           0.6876    0.6754    0.6543   0.6648   0.7456
-```
-
----
-
-### 5. Visualization Module (`visualizations.py`)
-
-**Purpose**: Create insights and dashboards
-
-**Key Classes**:
-```python
-class Visualizer:
-    def plot_event_window(event_analysis_df, ticker) -> None
-    def plot_surprise_vs_reaction(event_analysis_df) -> None
-    def plot_model_comparison(model_comparison_df) -> None
-    def plot_feature_importance(importance_df, top_n) -> None
-    def plot_volatility_analysis(event_analysis_df) -> None
-    def plot_volume_analysis(event_analysis_df) -> None
-    def plot_confusion_matrix(confusion_matrix, model_name) -> None
-```
-
-**Chart Types**:
-- Scatter plots: Surprise vs Returns
-- Bar charts: Model comparisons
-- Line plots: Volatility trends
-- Heatmaps: Confusion matrices
-- Histograms: Distribution analysis
-
----
-
-### 6. Main Pipeline (`main.py`)
-
-**Purpose**: Orchestrate entire analysis workflow
-
-**Pipeline Steps**:
-```
-1. Data Collection
-   ├─ Fetch price data (5 years)
-   ├─ Fetch earnings dates
-   └─ Save raw data
-
-2. Event Analysis
-   ├─ Analyze each earnings event
-   ├─ Calculate returns and abnormal returns
-   └─ Save event analysis
-
-3. Feature Engineering
-   ├─ Create ML features
-   ├─ Generate labels
-   └─ Save feature set
-
-4. Model Training
-   ├─ Train 3 models
-   ├─ Evaluate on test set
-   └─ Save model comparison
-
-5. Visualization
-   ├─ Generate charts
-   ├─ Create dashboards
-   └─ Save visualizations
-
-6. Reporting
-   ├─ Compile insights
-   ├─ Generate statistics
-   └─ Save final report
-```
-
-**Configuration**:
-```python
-config = {
-    'lookback_years': 5,
-    'event_window': 5,
-    'estimation_window': 60,
-    'label_threshold': 0.0,
-    'data_dir': 'data',
-    'models_dir': 'models',
-    'viz_dir': 'visualizations'
-}
-```
-
----
-
-## Data Flow Diagram
-
-```
-START
-  |
-  v
-┌──────────────────────────────────┐
-│ DataCollector.fetch_data()       │
-│ - Download prices               │
-│ - Get earnings dates            │
-└──────────────────────────────────┘
-  |
-  v
-┌──────────────────────────────────┐
-│ Raw CSV Files                     │
-│ - raw_price_data.csv            │
-│ - raw_earnings_data.csv         │
-└──────────────────────────────────┘
-  |
-  v
-┌──────────────────────────────────┐
-│ EventAnalyzer.analyze_events()   │
-│ - Calculate returns             │
-│ - Compute abnormal returns      │
-│ - Measure volatility/volume     │
-└──────────────────────────────────┘
-  |
-  v
-┌──────────────────────────────────┐
-│ event_analysis.csv               │
-│ - PreEventReturn                │
-│ - PostEventReturn               │
-│ - AbnormalReturnCAR             │
-│ - VolatilityRatio               │
-│ - VolumeSpikeRatio              │
-└──────────────────────────────────┘
-  |
-  v
-┌──────────────────────────────────┐
-│ FeatureEngineer.create_features()│
-│ - Engineer features             │
-│ - Create labels                 │
-│ - Handle missing values         │
-└──────────────────────────────────┘
-  |
-  v
-┌──────────────────────────────────┐
-│ engineered_features.csv          │
-│ - All ML features               │
-│ - Binary labels (0/1)           │
-└──────────────────────────────────┘
-  |
-  v
-┌──────────────────────────────────┐
-│ ModelTrainer.train_all_models()  │
-│ - Train Logistic Regression     │
-│ - Train Random Forest           │
-│ - Train XGBoost                 │
-└──────────────────────────────────┘
-  |
-  v
-┌──────────────────────────────────┐
-│ Model Comparison & Evaluation    │
-│ - Accuracy, Precision, Recall   │
-│ - Confusion matrices            │
-│ - Feature importance            │
-└──────────────────────────────────┘
-  |
-  v
-┌──────────────────────────────────┐
-│ Visualizer.generate_plots()      │
-│ - Surprise vs reaction          │
-│ - Model comparison              │
-│ - Feature importance            │
-│ - Volatility analysis           │
-└──────────────────────────────────┘
-  |
-  v
-┌──────────────────────────────────┐
-│ Final Outputs                    │
-│ - Data files (CSV)              │
-│ - Models (.pkl)                 │
-│ - Visualizations (PNG)          │
-│ - Report (TXT)                  │
-└──────────────────────────────────┘
-  |
-  v
- END
-```
-
----
-
-## Key Algorithms
-
-### 1. Abnormal Return Calculation
-
-```python
-def calculate_abnormal_returns(event_window, estimation_window):
-    # Step 1: Get estimation period data (days -60 to -10)
-    estimation_returns = calculate_returns(estimation_window_prices)
-    
-    # Step 2: Calculate expected return
-    expected_return = estimation_returns.mean()
-    
-    # Step 3: Get event period data (days -5 to +5)
-    event_returns = calculate_returns(event_window_prices)
-    
-    # Step 4: Calculate abnormal returns
-    abnormal_returns = event_returns - expected_return
-    
-    # Step 5: Calculate CAR
-    car = (1 + abnormal_returns[0]/100) * 
-          (1 + abnormal_returns[1]/100) * ... - 1
-    
-    return abnormal_returns, car
-```
-
-### 2. Model Training
-
-```python
-def train_model(X_train, y_train, model_type):
-    # Step 1: Split features and labels
-    X_features, y_labels = prepare_data()
-    
-    # Step 2: Scale if needed
-    scaler = StandardScaler()
-    X_scaled = scaler.fit_transform(X_train)
-    
-    # Step 3: Initialize model
-    model = create_model(model_type)
-    
-    # Step 4: Train on data
-    model.fit(X_scaled, y_train)
-    
-    # Step 5: Return trained model
-    return model, scaler
-```
-
-### 3. Feature Engineering
-
-```python
-def engineer_features(event_analysis_data):
-    features = event_analysis_data.copy()
-    
-    # 1. Surprise-based features
-    features['SurpriseAbs'] = abs(features['Surprise'])
-    
-    # 2. Volatility-based features
-    features['VolRatio'] = (features['PostVol'] / 
-                           features['EstimationVol'])
-    
-    # 3. Volume-based features
-    features['VolSpike'] = features['VolumeSpikeRatio']
-    
-    # 4. Interaction features
-    features['SurpriseVolInteract'] = (
-        features['SurpriseAbs'] * 
-        features['VolRatio']
-    )
-    
-    # 5. Momentum features
-    features['Momentum'] = features['PreEventReturn']
-    
-    return features
-```
-
----
-
-## Performance Characteristics
-
-### Time Complexity
-
-| Operation | Complexity | Notes |
-|-----------|-----------|-------|
-| Data fetch | O(n) | n = number of days |
-| Event analysis | O(n*m) | n = stocks, m = events |
-| Feature engineering | O(n*m) | n = stocks, m = events |
-| Model training | O(n²) to O(n³) | Depends on algorithm |
-| Model evaluation | O(n) | n = test samples |
-
-### Space Complexity
-
-| Component | Complexity | Notes |
-|-----------|-----------|-------|
-| Price data | O(n*m) | n = days, m = stocks |
-| Event data | O(m) | m = earnings events |
-| Features | O(n*f) | n = events, f = features |
-| Models | O(f²) | f = features |
-
-### Typical Execution Times
-
-| Step | Time (for 5 stocks, 5 years) |
-|------|-----|
-| Data collection | 30-60 seconds |
-| Event analysis | 5-10 seconds |
-| Feature engineering | <1 second |
-| Model training | 10-30 seconds |
-| Visualization | 5-15 seconds |
-| **Total** | **~1-2 minutes** |
-
----
-
-## Error Handling
-
-### Data Validation
-
-```python
-# Check data completeness
-if len(price_data) < min_required_days:
-    logger.error("Insufficient price data")
-    
-# Check earnings dates
-if earnings_dates is None or len(earnings_dates) == 0:
-    logger.warning(f"No earnings data for {ticker}")
-    
-# Validate feature values
-if feature.isna().sum() > threshold:
-    logger.warning("High missing value rate")
-```
-
-### Model Robustness
-
-```python
-# Cross-validation
-cross_val_scores = cross_val_score(model, X, y, cv=5)
-
-# Handle class imbalance
-class_weights = compute_class_weight(
-    'balanced', 
-    np.unique(y), 
-    y
+# Partitions data strictly in chronological order (earliest 80% train, latest 20% test)
+X_train, X_test, y_train, y_test, cols = feature_engineer.prepare_train_test_data(
+    features_df, labels, chronological=True
 )
-
-# Regularization
-model = LogisticRegression(C=1.0, penalty='l2')
 ```
 
 ---
 
-## Extensibility
+### 5. Machine Learning, Calibration & Metadata (`src/ml_models.py`)
 
-### Adding New Features
+**Purpose**: Model training, cross-validation with confidence intervals, hyperparameter tuning, probability calibration, and artifact persistence.
 
-```python
-class FeatureEngineer:
-    def create_features(self, event_analysis_df):
-        # ... existing features ...
-        
-        # Add new feature
-        df['MyNewFeature'] = (
-            df['PostEventReturn'] * df['VolumeSpikeRatio']
-        )
-        
-        return df
-```
-
-### Adding New Models
-
-```python
-from sklearn.ensemble import GradientBoostingClassifier
-
-class ModelTrainer:
-    def train_gradient_boosting(self, X_train, y_train):
-        model = GradientBoostingClassifier(
-            n_estimators=100,
-            learning_rate=0.1
-        )
-        model.fit(X_train, y_train)
-        return model
-```
-
-### Adding New Visualizations
-
-```python
-class Visualizer:
-    def plot_returns_heatmap(self, event_analysis_df):
-        pivot = event_analysis_df.pivot_table(
-            values='PostEventReturn',
-            index='Ticker',
-            columns='Quarter'
-        )
-        sns.heatmap(pivot, cmap='RdYlGn', center=0)
-        plt.show()
-```
+**Key Capabilities**:
+- **Selective Feature Scaling**: Automatically disables scaling for tree models (`RandomForest`, `XGBoost`) while retaining `StandardScaler` for `LogisticRegression`.
+- **Cross-Validation with 95% CI**:
+  $$\text{CI}_{95\%} = \bar{s} \pm 1.96 \times \frac{\text{Std}(s)}{\sqrt{k}}$$
+- **Hyperparameter Optimization**: `tune_hyperparameters` performs `GridSearchCV` strictly inside CV folds.
+- **Probability Calibration**: `calibrate_probabilities` applies `CalibratedClassifierCV` (isotonic or sigmoid) to align predicted probabilities with empirical event frequencies.
+- **Metadata Serialization**: In addition to pickled weights (`.pkl`), creates companion `.json` files storing:
+  - Feature column names in exact training order
+  - Standard scaling parameters
+  - Training timestamp & Python/library versions
+  - Accuracy, F1, and ROC-AUC evaluation metrics
 
 ---
 
-## Best Practices
+### 6. Realistic Backtesting Engine (`src/backtesting.py`)
 
-### Data Quality
-- Validate all inputs
-- Handle missing values appropriately
-- Check for outliers
-- Log all operations
+**Purpose**: Simulate trading strategies accounting for market frictions.
 
-### Model Development
-- Use cross-validation
-- Monitor for overfitting
-- Compare multiple models
-- Document hyperparameters
+**Realistic Execution Parameters**:
+- `commission_rate`: Fractional fee per trade (e.g. 0.001 = 10 bps).
+- `slippage_bps`: Bid-ask spread penalty (e.g. 5 bps deducted on execution).
+- `next_day_open`: Simulates realistic order fills on the day following announcement.
 
-### Code Organization
-- Follow PEP 8 style
-- Use type hints
-- Document functions
-- Log important steps
-
-### Performance
-- Cache expensive computations
-- Use vectorized operations
-- Parallelize where possible
-- Monitor memory usage
+**Strategies**:
+- **Momentum Strategy**: Goes long on positive surprise/CAR, short on negative.
+- **Mean-Reversion Strategy**: Bets against extreme initial event reactions.
+- **Metrics**: Total Return, Annualized Sharpe Ratio, Maximum Drawdown, Win Rate, and Profit Factor.
 
 ---
 
-## References
+### 7. Thread-Safe REST API Server (`api_server.py`)
 
-### Mathematical Concepts
-- Event study methodology: Standard approach in financial research
-- Abnormal returns: Actual - Expected return
-- CAR: Cumulative product of abnormal returns
-- Volatility: Standard deviation of returns
+**Purpose**: High-throughput FastAPI service for real-time inference and asynchronous pipeline execution.
 
-### Python Libraries
-- **yfinance**: Yahoo Finance data API
-- **pandas**: Data manipulation
-- **scikit-learn**: Machine learning
-- **xgboost**: Gradient boosting
-- **matplotlib/seaborn**: Visualization
+**Architecture**:
+```
+Client Request
+      │
+      ▼
+FastAPI Router (CORS & Auth Guard)
+      │
+      ├── GET /predict ──────► Reads Model Artifacts & Cached Scalers (Fast In-Memory)
+      │
+      └── POST /analyze ─────► AnalysisStateManager (asyncio.Lock Guard)
+                                    │
+                                    └── BackgroundTasks (Non-blocking async worker)
+```
 
-### Papers & Resources
-- MacKinley (1997): Event Studies in Economics and Finance
-- Fama et al.: Market Efficiency Studies
-- Vapnik: Support Vector Machines
-- Friedman: Gradient Boosting
+- **Thread-Safe State**: `AnalysisStateManager` guards concurrent pipeline runs with `asyncio.Lock()`.
+- **Sanitized JSON**: Implements `_safe_float()` converting IEEE 754 `NaN`/`Infinity` floats into JSON-compliant values.
+
+---
+
+## Data Flow Architecture (In-Memory & Storage)
+
+```
+[Yahoo Finance API]
+        │
+        ▼ (HTTP + Backoff Retry)
+[DataCollector] ───► DataFrame (Prices & Dates)
+        │
+        ▼ (In-Memory DataFrame Bus)
+[EventAnalyzer] ───► DataFrame (Event Windows & CAR)
+        │
+        ▼ (In-Memory DataFrame Bus)
+[FeatureEngineer] ─► DataFrame (Safe Pre-Event Features & Binary Labels)
+        │
+        ▼ (In-Memory DataFrame Bus)
+[ModelTrainer] ────► Model Pickles (.pkl) + Companion Metadata (.json)
+        │
+        ▼ (In-Memory DataFrame Bus)
+[Backtester] ──────► Strategy Performance & Equity Curves
+        │
+        ▼
+[Visualizer] ──────► High-Res Artifacts (PNG / PDF)
+```
+
+*(Note: Setting `save_intermediate=True` writes CSV snapshots to `data/` at each pipeline step for auditing.)*
+
+---
+
+## Packaging & Testing Specifications
+
+- **Package Standard**: PEP 517 / PEP 621 compliant `pyproject.toml` with `setuptools>=61.0`.
+- **Test Suite**: 68 automated unit, integration, and regression tests executed via `pytest`.
+- **Continuous Integration**: `.github/workflows/ci.yml` matrix pipeline across Python 3.10, 3.11, 3.12, and 3.13.
+- **Dependency Pinning**: Reproducible production deployments guaranteed via `requirements-lock.txt`.

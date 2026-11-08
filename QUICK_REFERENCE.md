@@ -1,410 +1,176 @@
 # Quick Reference Cheat Sheet
 
-## Installation (One Command)
+## Installation & Setup
+
 ```bash
+# Production install
 pip install -r requirements.txt
+
+# Editable package install with development & testing dependencies
+pip install -e ".[dev]"
+
+# Configure environment variables & secrets
+cp .env.example .env
+
+# Run all 68 automated tests
+python -m pytest
 ```
 
-## Running the System
+---
 
-### Quick Start (2 minutes)
-```bash
-python quick_start.py
-```
+## Running the Platform
 
-### Full Analysis
+### End-to-End Pipeline (CLI)
 ```bash
 python main.py
 ```
 
-### Interactive Notebook
+### Interactive Streamlit Dashboard
 ```bash
-jupyter notebook notebooks/earnings_analysis.ipynb
+streamlit run src/streamlit_app.py
+```
+
+### High-Throughput REST API (FastAPI)
+```bash
+uvicorn api_server:app --host 0.0.0.0 --port 8000 --reload
+# Interactive documentation: http://localhost:8000/docs
+```
+
+### Automated Retraining Scheduler
+```bash
+# Run one immediate retraining pass
+python retraining_scheduler.py --run-now
+
+# Run continuous background daemon
+python retraining_scheduler.py --continuous
 ```
 
 ---
 
-## Common Tasks
+## Core Classes & Modern API Signatures
 
-### Analyze Specific Stocks
+### 1. Unified Configuration (`src.config`)
 ```python
-from main import EarningsAnalysisPipeline
+from src import load_config, mask_secrets
 
-config = {
-    'lookback_years': 5,
-    'event_window': 5,
-    'estimation_window': 60,
-    'label_threshold': 0.0,
-    'data_dir': 'data',
-    'models_dir': 'models',
-    'viz_dir': 'visualizations'
-}
-
-pipeline = EarningsAnalysisPipeline(config)
-pipeline.run_complete_pipeline(['AAPL', 'MSFT', 'GOOGL'])
+# Loads from .env, env vars, config.ini, and defaults
+config = load_config(env_file=".env")
+masked = mask_secrets(config.to_dict())  # Automatically masks secrets
+print(config['tickers'])
 ```
 
-### Get Event Analysis Results
+### 2. Data Collection & Shape Validation (`src.data_collection`)
 ```python
-from src.data_collection import DataCollector
-from src.event_analysis import EventAnalyzer
+from src import DataCollector
 
-collector = DataCollector(lookback_years=5)
-price_data, earnings_data = collector.fetch_multiple_stocks(['AAPL', 'MSFT'])
+collector = DataCollector(lookback_years=5, max_retries=3)
+price_df, earnings_df = collector.fetch_multiple_stocks(['AAPL', 'NVDA', 'MSFT'])
+
+# Validate shapes and required schemas
+DataCollector.validate_collected_data(price_df, earnings_df)
+```
+
+### 3. Trading-Day Event Studies (`src.event_analysis`)
+```python
+from src import EventAnalyzer
 
 analyzer = EventAnalyzer(event_window=5, estimation_window=60)
-results = analyzer.analyze_multiple_events(price_data, earnings_data)
-
-print(results[['Ticker', 'PostEventReturn', 'AbnormalReturnCAR']])
+# Uses exact trading-day index offsets (handles weekends & after-hours)
+event_df = analyzer.analyze_multiple_events(price_df, earnings_df)
 ```
 
-### Train Models
+### 4. Zero-Leakage Feature Engineering (`src.feature_engineering`)
 ```python
-from src.feature_engineering import FeatureEngineer
-from src.ml_models import ModelTrainer
-
-# Prepare data
-engineer = FeatureEngineer()
-features = engineer.create_features(event_analysis)
-labels = engineer.create_binary_labels(event_analysis)
-
-X_train, X_test, y_train, y_test = engineer.prepare_train_test_data(
-    features, labels
-)
-
-# Train models
-trainer = ModelTrainer()
-comparison = trainer.train_all_models(X_train, X_test, y_train, y_test)
-print(comparison)
-```
-
-### Create Visualizations
-```python
-from src.visualizations import Visualizer
-
-viz = Visualizer()
-viz.plot_surprise_vs_reaction(event_analysis)
-viz.plot_model_comparison(model_comparison)
-viz.plot_feature_importance(importance_df, top_n=15)
-```
-
----
-
-## Key Classes & Methods
-
-### DataCollector
-```python
-from src.data_collection import DataCollector
-
-collector = DataCollector(lookback_years=5)
-price_data = collector.fetch_stock_price_data('AAPL')
-earnings_data = collector.fetch_earnings_dates('AAPL')
-price_df, earnings_df = collector.fetch_multiple_stocks(['AAPL', 'MSFT'])
-```
-
-### EventAnalyzer
-```python
-from src.event_analysis import EventAnalyzer
-
-analyzer = EventAnalyzer(event_window=5, estimation_window=60)
-results = analyzer.analyze_event_window(price_data, earnings_date, 'AAPL')
-analysis_df = analyzer.analyze_multiple_events(price_data, earnings_data)
-```
-
-### FeatureEngineer
-```python
-from src.feature_engineering import FeatureEngineer
+from src import FeatureEngineer, SAFE_FEATURE_COLUMNS
 
 engineer = FeatureEngineer()
-features = engineer.create_features(event_analysis)
-labels = engineer.create_binary_labels(event_analysis, threshold=0.0)
-X_train, X_test, y_train, y_test = engineer.prepare_train_test_data(
-    features, labels, test_size=0.2
+# Extracts pre-announcement features only (zero look-ahead bias)
+features_df, feature_cols = engineer.create_features(event_df, return_feature_names=True)
+labels = engineer.create_binary_labels(event_df, threshold=0.0)
+
+# Chronological time-series train/test split
+X_train, X_test, y_train, y_test, cols = engineer.prepare_train_test_data(
+    features_df, labels, chronological=True
 )
 ```
 
-### ModelTrainer
+### 5. Machine Learning, CV & Metadata Persistence (`src.ml_models`)
 ```python
-from src.ml_models import ModelTrainer
+from src import ModelTrainer
 
 trainer = ModelTrainer()
-comparison = trainer.train_all_models(X_train, X_test, y_train, y_test)
-trainer.save_model('Random Forest', 'models/rf.pkl')
-trainer.load_model('models/rf.pkl', 'Random Forest')
+
+# Cross-validation with 95% confidence intervals
+cv_res = trainer.evaluate_cv(trainer.models['random_forest'], X_train, y_train, cv=5)
+print("95% CI Accuracy:", cv_res['accuracy_ci_95'])
+
+# Hyperparameter optimization (GridSearchCV within CV folds)
+best_model, best_params = trainer.tune_hyperparameters('xgboost', X_train, y_train, cv=3)
+
+# Probability calibration (CalibratedClassifierCV)
+calibrated_model = trainer.calibrate_probabilities(best_model, X_test, y_test)
+
+# Saves model weights (.pkl) and companion metadata (.json)
+trainer.save_model(
+    'xgboost',
+    'models/xgboost.pkl',
+    feature_columns=feature_cols,
+    metadata={'best_params': best_params}
+)
 ```
 
-### Visualizer
+### 6. Realistic Backtesting with Market Frictions (`src.backtesting`)
 ```python
-from src.visualizations import Visualizer
+from src import Backtester
 
-viz = Visualizer()
-viz.plot_surprise_vs_reaction(event_analysis, save_path='viz/surprise.png')
-viz.plot_model_comparison(model_comparison)
-viz.plot_feature_importance(importance_df, top_n=15)
-viz.plot_confusion_matrix(cm, model_name='XGBoost')
+backtester = Backtester(
+    initial_capital=100000.0,
+    commission_rate=0.001,      # 0.1% broker commission
+    slippage_bps=5.0,           # 5 basis points bid-ask slippage
+    next_day_open=True          # Next-day open execution timing
+)
+perf = backtester.run_momentum_strategy(event_df)
+print(f"Sharpe Ratio: {perf['sharpe_ratio']:.2f}")
+print(f"Max Drawdown: {perf['max_drawdown']:.2%}")
 ```
 
----
-
-## Data Formats
-
-### Price Data (raw_price_data.csv)
-```
-Date,Open,High,Low,Close,Adj Close,Volume,Ticker
-2023-01-03,150.93,151.93,150.15,150.63,150.63,15648900,AAPL
-```
-
-### Earnings Data (raw_earnings_data.csv)
-```
-Date,EPS,Surprise_Percentage,Ticker
-2023-01-27,1.72,0.0,AAPL
-```
-
-### Event Analysis (event_analysis.csv)
-```
-Ticker,EarningsDate,PreEventReturn,PostEventReturn,AbnormalReturnCAR,PreEventVolatility,...
-AAPL,2023-01-27,1.23,2.45,1.87,23.4,...
-```
-
-### Features (engineered_features.csv)
-```
-Ticker,EarningsDate,EarningsSurpriseAbs,VolatilityChangeRatio,VolumeSpikeRatio,...
-AAPL,2023-01-27,0.0,1.23,1.45,...
-```
-
----
-
-## Configuration File (config.ini)
-
-```ini
-[DATA_COLLECTION]
-lookback_years = 5
-tickers = AAPL, MSFT, GOOGL, AMZN, TSLA
-
-[EVENT_ANALYSIS]
-event_window = 5
-estimation_window = 60
-
-[FEATURE_ENGINEERING]
-label_threshold = 0.0
-
-[MACHINE_LEARNING]
-test_size = 0.2
-random_state = 42
-
-[DIRECTORIES]
-data_dir = data
-models_dir = models
-viz_dir = visualizations
-```
-
----
-
-## Output Files Created
-
-| File | Location | Purpose |
-|------|----------|---------|
-| raw_price_data.csv | data/ | Historical prices |
-| raw_earnings_data.csv | data/ | Earnings dates & EPS |
-| event_analysis.csv | data/ | Analysis results |
-| engineered_features.csv | data/ | ML features |
-| model_comparison.csv | data/ | Model metrics |
-| final_report.txt | data/ | Summary report |
-| logistic_regression.pkl | models/ | Trained model |
-| random_forest.pkl | models/ | Trained model |
-| xgboost.pkl | models/ | Trained model |
-| 01_surprise_vs_reaction.png | visualizations/ | Chart |
-| 02_model_comparison.png | visualizations/ | Chart |
-| 03_volatility_analysis.png | visualizations/ | Chart |
-| 04_volume_analysis.png | visualizations/ | Chart |
-| 05_feature_importance_*.png | visualizations/ | Chart |
-
----
-
-## Key Metrics Explained
-
-### Returns
-- **PreEventReturn**: Return from day -5 to day -1
-- **PostEventReturn**: Return from day +1 to day +5
-- Formula: `(Price_final - Price_initial) / Price_initial * 100`
-
-### Abnormal Returns
-- **AbnormalReturnCAR**: Cumulative abnormal return
-- Formula: `(1 + AR1/100) × (1 + AR2/100) × ... - 1`
-- Shows unexpected market reaction
-
-### Volatility
-- **VolatilityChangeRatio**: PostVolatility / EstimationVolatility
-- Shows increase in risk
-- Value > 1 = increased volatility
-
-### Volume
-- **VolumeSpikeRatio**: PostVolume / EstimationVolume
-- Shows trading activity increase
-- Value > 1.5 = significant spike
-
----
-
-## Model Metrics
-
-| Metric | Formula | Interpretation |
-|--------|---------|-----------------|
-| Accuracy | (TP+TN)/(TP+TN+FP+FN) | % correct predictions |
-| Precision | TP/(TP+FP) | % positive predictions correct |
-| Recall | TP/(TP+FN) | % actual positives found |
-| F1-Score | 2×(P×R)/(P+R) | Harmonic mean of P&R |
-| AUC-ROC | Area under curve | Overall discrimination ability |
-
-**Legend**: TP=True Positive, TN=True Negative, FP=False Positive, FN=False Negative
-
----
-
-## Troubleshooting
-
-| Problem | Solution |
-|---------|----------|
-| No earnings data | Use different stock (try AAPL, MSFT) |
-| Insufficient data | Reduce event_window or increase lookback_years |
-| Import error | Run `pip install -r requirements.txt` |
-| Low accuracy | Try different threshold or more stocks |
-| Memory error | Reduce number of stocks or years |
-| Plot not showing | Add `%matplotlib inline` in Jupyter |
-
----
-
-## Performance Tips
-
-### Speed Up Analysis
+### 7. Sector Comparison & Sentiment Analysis
 ```python
-# Use fewer stocks
-tickers = ['AAPL', 'MSFT']  # Instead of 10 stocks
+from src import SectorAnalyzer, SentimentAnalyzer
 
-# Reduce lookback period
-config['lookback_years'] = 2  # Instead of 5
+# Sector comparisons
+sector_analyzer = SectorAnalyzer()
+sector_summary = sector_analyzer.aggregate_by_sector(event_df)
 
-# Reduce event window
-config['event_window'] = 3  # Instead of 5
-```
-
-### Improve Model Accuracy
-```python
-# Use more stocks (20+)
-tickers = ['AAPL', 'MSFT', 'GOOGL', 'AMZN', 'TSLA', ...]
-
-# Increase data period
-config['lookback_years'] = 5
-
-# Engineer more features
-# Add custom features to FeatureEngineer class
+# News sentiment extraction
+sentiment_analyzer = SentimentAnalyzer(method='textblob')
+score = sentiment_analyzer.analyze_text("Company reports strong Q3 beat and raises guidance")
 ```
 
 ---
 
-## File Locations Quick Access
+## REST API Endpoints Quick Reference
 
-```
-Project Root: c:\Users\jayas\OneDrive\Desktop\
-             AI-Driven Earnings Impact & Market Reaction Analysis\
-
-Python Files: src/
-Data Output: data/
-Models: models/
-Visualizations: visualizations/
-Notebooks: notebooks/
-Documentation: README.md, GETTING_STARTED.md, ARCHITECTURE.md
-Config: config.ini
-Main Script: main.py
-Quick Start: quick_start.py
-```
+| Method | Endpoint | Description |
+|---|---|---|
+| `GET` | `/health` | Healthcheck and model readiness probe |
+| `POST` | `/analyze` | Offload background pipeline execution (thread-safe) |
+| `POST` | `/predict` | Predict post-earnings probability from pre-announcement metrics |
+| `GET` | `/metrics` | Retrieve model evaluation metrics & confidence intervals |
+| `GET` | `/models` | List loaded models and serialized feature columns |
+| `GET` | `/status` | Check state manager progress and active worker tasks |
 
 ---
 
-## Common Commands
+## Key Output Artifacts
 
-```bash
-# Install dependencies
-pip install -r requirements.txt
-
-# Run quick analysis
-python quick_start.py
-
-# Run full analysis
-python main.py
-
-# Open Jupyter notebook
-jupyter notebook notebooks/earnings_analysis.ipynb
-
-# Check Python version
-python --version
-
-# List installed packages
-pip list
-
-# Update packages
-pip install --upgrade -r requirements.txt
-```
-
----
-
-## Learning Path
-
-1. **Start**: Run `python quick_start.py`
-2. **Explore**: Check outputs in data/, visualizations/
-3. **Understand**: Read GETTING_STARTED.md
-4. **Learn**: Open and run Jupyter notebook
-5. **Deep Dive**: Read ARCHITECTURE.md
-6. **Customize**: Modify config.ini and parameters
-7. **Extend**: Add new features or models
-8. **Deploy**: Use trained models for predictions
-
----
-
-## Important Concepts
-
-### Event Window
-- Definition: ±N trading days around earnings
-- Default: ±5 days (configurable)
-- Purpose: Analyze price reaction to announcement
-
-### Abnormal Returns
-- Definition: Actual return minus expected return
-- Method: Mean-adjusted model
-- Interpretation: Unexpected market reaction
-
-### CAR (Cumulative Abnormal Return)
-- Definition: Product of (1 + abnormal return)
-- Purpose: Total unexpected return over period
-- Interpretation: Net market surprise effect
-
-### Feature Importance
-- Definition: How much each feature helps predictions
-- Source: Model-specific (coefficients, importances)
-- Usage: Understand what drives market reactions
-
----
-
-## Getting Help
-
-1. **Configuration Issues**: Check config.ini and GETTING_STARTED.md
-2. **Code Questions**: Review docstrings and comments in src/
-3. **Methodology**: Read ARCHITECTURE.md for mathematical details
-4. **Examples**: Check quick_start.py and notebooks/
-5. **API Reference**: See README.md for complete documentation
-
----
-
-## Project Statistics
-
-- **Total Python Code**: ~1,500 lines
-- **Documentation**: ~1,200 lines
-- **Modules**: 6 core analysis modules
-- **Classes**: 6 main classes + utilities
-- **Features Engineered**: 15+ per event
-- **Models Trained**: 3 (LogReg, RF, XGB)
-- **Visualizations**: 7 types
-- **Test Stocks**: 5-10 recommended
-- **Execution Time**: 1-2 minutes (5 stocks, 5 years)
-
----
-
-**For more information, see the complete documentation files!**
+| Artifact | Location | Description |
+|---|---|---|
+| Trained Models | `models/*.pkl` | Serialized estimator weights |
+| Model Metadata | `models/*.json` | Feature columns, scalers, and library versions |
+| Raw Prices | `data/raw_price_data.csv` | OHLCV historical price series |
+| Raw Earnings | `data/raw_earnings_data.csv` | Announcement dates & EPS surprises |
+| Event Metrics | `data/event_analysis.csv` | Pre/post returns, abnormal returns, CAR |
+| Feature Set | `data/engineered_features.csv` | Pre-event features & binary classification labels |
+| Visualizations | `visualizations/*.png` | High-res charts (scatter, model comparison, feature importance) |
+| Summary Report | `data/final_report.txt` | Executive summary and quantitative findings |

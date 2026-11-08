@@ -1,16 +1,25 @@
 # AI-Driven Earnings Impact & Market Reaction Analysis
 
-A comprehensive data-driven system that analyzes stock price reactions around quarterly earnings announcements and uses machine learning to predict post-earnings market movement.
+A quantitative, production-grade system that analyzes equity price behavior around quarterly corporate earnings announcements and leverages machine learning to predict post-earnings market reactions.
 
-## Project Overview
+[![CI](https://github.com/Jaysurya046/ai-earnings-impact-analysis/actions/workflows/ci.yml/badge.svg)](https://github.com/Jaysurya046/ai-earnings-impact-analysis/actions/workflows/ci.yml)
+[![Python Version](https://img.shields.io/badge/python-3.9%20%7C%203.10%20%7C%203.11%20%7C%203.12%20%7C%203.13-blue)](pyproject.toml)
+[![Tests](https://img.shields.io/badge/tests-68%20passed-brightgreen)](tests/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](pyproject.toml)
 
-This system:
-- **Collects** historical stock price and earnings data using Yahoo Finance
-- **Analyzes** price movements in event windows around earnings dates
-- **Engineers** ML features from market behavior patterns
-- **Trains** classification models to predict market reactions
-- **Visualizes** results through comprehensive dashboards
-- **Generates** actionable insights for investment strategies
+---
+
+## System Capabilities
+
+- **Resilient Market Data Ingestion**: Yahoo Finance connector with MultiIndex column normalization, timezone handling, future earnings date filtering, and exponential backoff retry logic.
+- **Trading-Day Event Studies**: Exact calendar-to-trading-day alignment for event windows ($[-5, +5]$ days) and estimation windows (60 days), calculating Cumulative Abnormal Returns (CAR) using market-adjusted benchmarks.
+- **Zero-Leakage Feature Engineering**: Strict pre-announcement feature boundaries (`SAFE_FEATURE_COLUMNS`) ensuring no look-ahead contamination from post-announcement returns or volume.
+- **Rigorous ML Evaluation**: TimeSeriesSplit chronological validation to prevent look-ahead bias, cross-validation with 95% confidence intervals, tree-model scaling safety, and hyperparameter tuning (`GridSearchCV`) with probability calibration (`CalibratedClassifierCV`).
+- **Realistic Backtesting**: Quantitative simulation of momentum and mean-reversion strategies accounting for broker commissions, bid-ask slippage (basis points), and next-day open execution timing.
+- **Thread-Safe REST API**: FastAPI server with async concurrency locks (`AnalysisStateManager`), non-blocking background workers, sanitized JSON float serialization, and secured CORS.
+- **Standardized Packaging & Hygiene**: PEP 517/621 `pyproject.toml`, reproducible `requirements-lock.txt`, secret management with `.env.example`, and automated GitHub Actions CI.
+
+---
 
 ## Project Structure
 
@@ -28,10 +37,11 @@ This system:
 │   ├── sector_comparison.py     # Sector-level impact analysis
 │   ├── sentiment_analysis.py    # News sentiment extraction around earnings
 │   ├── streamlit_app.py         # Interactive multi-tab web dashboard
+│   ├── lstm_models.py           # Deep learning LSTM sequence predictors
 │   ├── utils.py                 # Modern pandas utilities & helper functions
 │   └── visualizations.py        # Chart generation and reporting
 │
-├── tests/                        # Comprehensive test suite (unit & integration)
+├── tests/                        # Comprehensive test suite (68 unit & integration tests)
 ├── data/                         # Cached market data and analysis outputs
 ├── models/                       # Model artifacts (.pkl) and companion metadata (.json)
 ├── visualizations/               # Generated analytical figures
@@ -42,368 +52,201 @@ This system:
 ├── retraining_scheduler.py       # Scheduled retraining daemon
 ├── pyproject.toml                # PEP 517/621 packaging & test config
 ├── config.ini                    # Core configuration file
+├── .env.example                  # Environment configuration & secrets template
 ├── requirements.txt              # Primary project dependencies
 ├── requirements-lock.txt         # Pinned reproducible dependency lockfile
 └── README.md                     # Project documentation
 ```
 
-## Installation
+---
+
+## Installation & Setup
 
 ### Prerequisites
-- Python 3.9+ (Python 3.10–3.13 supported)
-- pip package manager
+- Python 3.9+ (Python 3.10–3.13 recommended)
+- Git & pip
 
-### Setup
-
-1. **Clone the repository**
-   ```bash
-   cd "AI-Driven Earnings Impact & Market Reaction Analysis"
-   ```
-
-2. **Create a virtual environment (recommended)**
-   ```bash
-   python -m venv venv
-   
-   # Windows
-   venv\Scripts\activate
-   
-   # macOS/Linux
-   source venv/bin/activate
-   ```
-
-3. **Install package & dependencies**
-   ```bash
-   # Standard install
-   pip install -r requirements.txt
-
-   # Editable package installation with dev tools
-   pip install -e ".[dev]"
-   ```
-
-4. **Run Automated Test Suite**
-   ```bash
-   python -m pytest
-   ```
-
-## Quick Start
-
-### Basic Usage
-
-Run the complete analysis pipeline:
-
+### 1. Clone & Set Up Environment
 ```bash
-python quick_start.py
+git clone https://github.com/Jaysurya046/ai-earnings-impact-analysis.git
+cd "ai-earnings-impact-analysis"
+
+# Create and activate virtual environment
+python -m venv venv
+
+# Windows
+venv\Scripts\activate
+
+# macOS / Linux
+source venv/bin/activate
 ```
 
-Or with custom configuration:
-
+### 2. Install Dependencies
 ```bash
-python main.py
+# Production install
+pip install -r requirements.txt
+
+# Or editable install with development & testing tools
+pip install -e ".[dev]"
 ```
 
-### Example: Analyze Specific Stocks
-
-```python
-from main import EarningsAnalysisPipeline
-
-config = {
-    'lookback_years': 5,
-    'event_window': 5,
-    'estimation_window': 60,
-    'label_threshold': 0.0,
-    'data_dir': 'data',
-    'models_dir': 'models',
-    'viz_dir': 'visualizations'
-}
-
-tickers = ['AAPL', 'MSFT', 'GOOGL', 'AMZN', 'TSLA']
-
-pipeline = EarningsAnalysisPipeline(config)
-pipeline.run_complete_pipeline(tickers)
+### 3. Environment Secrets Configuration
+```bash
+# Copy secrets template to active .env
+cp .env.example .env
 ```
+Edit `.env` to specify your `API_SECRET_KEY`, preferred port, or custom ticker list.
 
-## Key Features
-
-### 1. Data Collection
-- **Yahoo Finance Integration**: Fetches historical OHLCV data
-- **Earnings Dates**: Retrieves quarterly earnings announcement dates
-- **EPS Data**: Collects reported vs expected EPS for surprise calculation
-
-### 2. Event-Based Analysis
-- **Event Window**: Analyzes ±5 trading days around earnings (configurable)
-- **Returns Calculation**: Pre-event vs post-event returns
-- **Abnormal Returns**: Mean-adjusted abnormal return model
-- **CAR (CAR)**: Cumulative abnormal returns across event window
-- **Volatility Analysis**: Pre/post earnings volatility changes
-- **Volume Analysis**: Volume spike detection and measurement
-
-### 3. Feature Engineering
-Features created include:
-- Earnings surprise percentage and direction
-- Pre-event volatility and returns
-- Volatility change ratio
-- Volume spike indicators
-- Price momentum indicators
-- Derived interaction features
-
-### 4. Machine Learning Models
-
-**Three Classification Models:**
-- **Logistic Regression**: Fast, interpretable baseline
-- **Random Forest**: Ensemble method with feature importance
-- **XGBoost**: Gradient boosting with state-of-the-art performance
-
-**Evaluation Metrics:**
-- Accuracy, Precision, Recall, F1-Score
-- Confusion Matrix
-- AUC-ROC Score
-
-### 5. Visualizations
-
-Generated dashboards include:
-- **Earnings Surprise vs Market Reaction**: Scatter plot with trend line
-- **Model Comparison**: Performance metrics across all models
-- **Volatility Analysis**: Pre/during/post event volatility
-- **Volume Analysis**: Trading volume around earnings
-- **Feature Importance**: Top predictive features
-- **Confusion Matrices**: Model prediction accuracy breakdown
-
-### 6. Insights & Reporting
-
-Automatic generation of:
-- Executive summary with key statistics
-- Correlation analysis between surprise and returns
-- Best-performing model identification
-- Actionable investment recommendations
-
-## Configuration
-
-Edit `config.ini` to customize:
-
-```ini
-[DATA_COLLECTION]
-lookback_years = 5
-tickers = AAPL, MSFT, GOOGL, AMZN, TSLA
-
-[EVENT_ANALYSIS]
-event_window = 5
-estimation_window = 60
-
-[MACHINE_LEARNING]
-test_size = 0.2
-random_state = 42
+### 4. Run Test Suite
+```bash
+python -m pytest
 ```
-
-## Usage Examples
-
-### Example 1: Full Pipeline with Default Settings
-```python
-from main import EarningsAnalysisPipeline
-
-config = {
-    'lookback_years': 5,
-    'event_window': 5,
-    'estimation_window': 60,
-    'label_threshold': 0.0,
-    'data_dir': 'data',
-    'models_dir': 'models',
-    'viz_dir': 'visualizations'
-}
-
-pipeline = EarningsAnalysisPipeline(config)
-pipeline.run_complete_pipeline(['AAPL', 'MSFT', 'GOOGL'])
-```
-
-### Example 2: Step-by-Step Analysis
-```python
-pipeline = EarningsAnalysisPipeline(config)
-
-# Step 1: Collect data
-price_data, earnings_data = pipeline.step_1_collect_data(['AAPL', 'MSFT'])
-
-# Step 2: Event analysis
-event_analysis = pipeline.step_2_event_analysis()
-
-# Step 3: Features
-features, labels = pipeline.step_3_feature_engineering()
-
-# Step 4: Models
-model_comparison = pipeline.step_4_train_models()
-
-# Step 5: Visualizations
-pipeline.step_5_visualizations()
-
-# Step 6: Report
-report = pipeline.step_6_insights_report()
-```
-
-### Example 3: Custom Data Analysis
-```python
-from src.data_collection import DataCollector
-from src.event_analysis import EventAnalyzer
-
-collector = DataCollector(lookback_years=3)
-price_data, earnings_data = collector.fetch_multiple_stocks(['TSLA', 'NVDA'])
-
-analyzer = EventAnalyzer(event_window=3, estimation_window=90)
-results = analyzer.analyze_multiple_events(price_data, earnings_data)
-
-print(results[['Ticker', 'EarningsDate', 'PostEventReturn', 'AbnormalReturnCAR']])
-```
-
-## Output Files
-
-After running the pipeline, you'll find:
-
-### Data Files (`data/`)
-- `raw_price_data.csv` - Historical price data
-- `raw_earnings_data.csv` - Earnings dates and EPS data
-- `event_analysis.csv` - Returns and metrics around earnings
-- `engineered_features.csv` - ML features and labels
-- `model_comparison.csv` - Model performance metrics
-- `final_report.txt` - Analysis report
-
-### Visualizations (`visualizations/`)
-- `01_surprise_vs_reaction.png` - Earnings surprise correlation
-- `02_model_comparison.png` - Model performance bars
-- `03_volatility_analysis.png` - Volatility around earnings
-- `04_volume_analysis.png` - Volume changes
-- `05_feature_importance_*.png` - Top predictive features
-
-### Models (`models/`)
-- `logistic_regression.pkl` - Trained model
-- `random_forest.pkl` - Trained model
-- `xgboost.pkl` - Trained model
-
-## Key Insights You'll Discover
-
-1. **Earnings Surprise Correlation**: How EPS surprises impact stock prices
-2. **Volatility Patterns**: Risk changes around earnings announcements
-3. **Volume Spikes**: Trading activity patterns during events
-4. **Market Mispricing**: Stocks with predictable post-earnings reactions
-5. **Model Accuracy**: Which ML approach best predicts market reactions
-
-## Customization
-
-### Modify Event Window
-```python
-analyzer = EventAnalyzer(event_window=7)  # ±7 days instead of ±5
-```
-
-### Change Classification Threshold
-```python
-labels = feature_engineer.create_binary_labels(event_analysis, threshold=1.5)
-```
-
-### Train with Different Features
-```python
-feature_columns = ['EarningsSurpriseAbs', 'VolatilityChangeRatio', 'VolumeAnomalous']
-X_train, X_test, y_train, y_test = feature_engineer.prepare_train_test_data(
-    features, labels, feature_columns=feature_columns
-)
-```
-
-## Requirements
-
-See `requirements.txt` for complete list. Key packages:
-- **pandas**: Data manipulation
-- **numpy**: Numerical computing
-- **yfinance**: Yahoo Finance API
-- **scikit-learn**: ML models and utilities
-- **xgboost**: Gradient boosting
-- **matplotlib/seaborn**: Visualization
-
-## Troubleshooting
-
-### Issue: No earnings data found
-**Solution**: Some stocks may not have earnings data on Yahoo Finance. Try other tickers.
-
-### Issue: Insufficient data for event window
-**Solution**: Increase `estimation_window` or use stocks with longer trading histories.
-
-### Issue: Model performance is poor
-**Solution**: 
-- Try different event windows
-- Adjust label threshold
-- Use more historical data
-- Test with different ticker groups
-
-## Next Steps for Enhancement
-
-1. **Sentiment Analysis**: Incorporate news sentiment around earnings
-2. **Sector Analysis**: Compare reactions across different sectors
-3. **Deep Learning**: Use LSTM networks for time-series prediction
-4. **Real-time Prediction**: Deploy models for live market predictions
-5. **Power BI Integration**: Connect to Power BI for interactive dashboards
-6. **Database Storage**: Migrate to SQL database for scalability
-
-## API Reference
-
-### DataCollector
-```python
-collector = DataCollector(lookback_years=5)
-price_data = collector.fetch_stock_price_data('AAPL')
-earnings_data = collector.fetch_earnings_dates('AAPL')
-price_df, earnings_df = collector.fetch_multiple_stocks(['AAPL', 'MSFT'])
-```
-
-### EventAnalyzer
-```python
-analyzer = EventAnalyzer(event_window=5, estimation_window=60)
-results = analyzer.analyze_event_window(price_data, earnings_date, 'AAPL')
-analysis_df = analyzer.analyze_multiple_events(price_data, earnings_data)
-```
-
-### FeatureEngineer
-```python
-engineer = FeatureEngineer()
-features = engineer.create_features(event_analysis)
-labels = engineer.create_binary_labels(event_analysis, threshold=0.0)
-X_train, X_test, y_train, y_test = engineer.prepare_train_test_data(features, labels)
-```
-
-### ModelTrainer
-```python
-trainer = ModelTrainer()
-comparison = trainer.train_all_models(X_train, X_test, y_train, y_test)
-trainer.save_model('Random Forest', 'models/rf_model.pkl')
-```
-
-### Visualizer
-```python
-viz = Visualizer()
-viz.plot_surprise_vs_reaction(event_analysis)
-viz.plot_model_comparison(model_comparison)
-viz.plot_feature_importance(importance_df, top_n=15)
-```
-
-## Contributing
-
-To extend the system:
-
-1. Add new features in `feature_engineering.py`
-2. Implement new models in `ml_models.py`
-3. Create new visualizations in `visualizations.py`
-4. Update `main.py` to integrate new components
-
-## License
-
-This project is provided as-is for educational and research purposes.
-
-## Support
-
-For issues, questions, or suggestions:
-1. Check troubleshooting section
-2. Review configuration settings
-3. Verify data availability
-4. Check log messages for detailed error information
-
-## Disclaimer
-
-This analysis is for educational purposes. Past performance does not guarantee future results. Always conduct your own due diligence before making investment decisions. The predictions from ML models should not be used as sole basis for trading decisions.
+All 68 tests across data collection, event analysis, feature isolation, ML training, backtesting, and API concurrency will run.
 
 ---
 
-**Created**: February 2026
-**Python Version**: 3.8+
-**Last Updated**: February 2026
+## Running the Platform
+
+### 1. End-to-End Analysis Pipeline (CLI)
+Run the full in-memory quantitative pipeline:
+```bash
+# Run with defaults or config.ini overrides
+python main.py
+```
+To run a fast programmatic trial on selected equities:
+```python
+from src.config import load_config
+from main import EarningsAnalysisPipeline
+
+config = load_config()
+pipeline = EarningsAnalysisPipeline(config.to_dict())
+
+# Runs fully in-memory without mandatory disk round-trips
+price_df, earnings_df = pipeline.step_1_collect_data(['AAPL', 'MSFT', 'NVDA'])
+event_df = pipeline.step_2_event_analysis(price_df, earnings_df)
+features_df, labels = pipeline.step_3_feature_engineering(event_df)
+comparison = pipeline.step_4_train_models(features_df, labels)
+```
+
+### 2. Interactive Streamlit Dashboard
+Launch the multi-tab exploratory research dashboard:
+```bash
+streamlit run src/streamlit_app.py
+```
+Features:
+- **Overview Dashboard**: Surprise distribution vs CAR reactions and cumulative returns.
+- **ML Performance**: Accuracy, F1, ROC-AUC comparisons and feature importance rankings.
+- **Sector Comparison**: Sector-by-sector reaction heatmaps and t-test statistics.
+- **Backtesting**: Portfolio equity curves under realistic commission & slippage friction.
+
+### 3. REST API Server (FastAPI)
+Start the high-throughput, thread-safe asynchronous prediction server:
+```bash
+uvicorn api_server:app --host 0.0.0.0 --port 8000 --reload
+```
+Interactive OpenAPI documentation will be accessible at `http://localhost:8000/docs`.
+
+Key Endpoints:
+- `GET /health`: Service health and model status
+- `POST /analyze`: Asynchronous background pipeline execution
+- `POST /predict`: Real-time post-earnings movement probability prediction
+- `GET /metrics`: Current model evaluation metrics and confidence intervals
+- `GET /status`: State manager progress and running background job status
+
+---
+
+## Core Modules & API Reference
+
+### Data Collection (`src.data_collection`)
+```python
+from src import DataCollector
+
+collector = DataCollector(lookback_years=5, max_retries=3)
+price_df, earnings_df = collector.fetch_multiple_stocks(['AAPL', 'NVDA', 'GOOGL'])
+DataCollector.validate_collected_data(price_df, earnings_df)
+```
+
+### Event Study Analysis (`src.event_analysis`)
+```python
+from src import EventAnalyzer
+
+analyzer = EventAnalyzer(event_window=5, estimation_window=60)
+# Uses trading-day offsets and mean-adjusted abnormal returns
+analysis_df = analyzer.analyze_multiple_events(price_df, earnings_df)
+```
+
+### Feature Engineering (`src.feature_engineering`)
+```python
+from src import FeatureEngineer, SAFE_FEATURE_COLUMNS
+
+engineer = FeatureEngineer()
+# Extracts only pre-announcement information (zero post-event leakage)
+features_df, feature_cols = engineer.create_features(analysis_df, return_feature_names=True)
+labels = engineer.create_binary_labels(analysis_df, threshold=0.0)
+
+# Chronological time-series split
+X_train, X_test, y_train, y_test, cols = engineer.prepare_train_test_data(
+    features_df, labels, chronological=True
+)
+```
+
+### Machine Learning (`src.ml_models`)
+```python
+from src import ModelTrainer
+
+trainer = ModelTrainer()
+# Cross-validation with 95% confidence intervals
+cv_results = trainer.evaluate_cv(trainer.models['random_forest'], X_train, y_train, cv=5)
+
+# Hyperparameter optimization within CV folds
+best_xgb, best_params = trainer.tune_hyperparameters('xgboost', X_train, y_train, cv=3)
+
+# Saves model pickle and companion .json metadata
+trainer.save_model('xgboost', 'models/xgboost.pkl', feature_columns=cols)
+```
+
+### Realistic Backtesting (`src.backtesting`)
+```python
+from src import Backtester
+
+backtester = Backtester(
+    initial_capital=100000.0,
+    commission_rate=0.001,      # 0.1% broker commission per trade
+    slippage_bps=5.0,           # 5 basis points market slippage
+    next_day_open=True          # Execute at next-day open price
+)
+results = backtester.run_momentum_strategy(analysis_df)
+print(f"Sharpe Ratio: {results['sharpe_ratio']:.2f}, Max Drawdown: {results['max_drawdown']:.2%}")
+```
+
+---
+
+## Verification & Testing
+
+The project maintains 100% test pass rate across 15 automated test suites:
+- `test_feature_leakage.py`: Proves post-event returns are never used as model inputs.
+- `test_event_analysis.py`: Verifies trading-day indexing and CAR event window summation.
+- `test_data_collection.py`: Checks MultiIndex flattening, future date filters, and retry logic.
+- `test_model_metadata.py`: Confirms `.json` metadata serialization and persistence.
+- `test_config.py`: Validates hierarchical merging of `config.ini`, `.env`, and OS env vars.
+- `test_feature_definitions.py`: Asserts central `SAFE_FEATURE_COLUMNS` integrity.
+- `test_api_server.py`: Verifies async concurrency locks, background workers, and `/predict`.
+- `test_error_handling.py`: Tests specific exception handling and data validation gates.
+- `test_utils.py`: Validates modern `.ffill()` / `.bfill()` pandas operations.
+- `test_pipeline_in_memory.py`: Confirms zero-IO in-memory DataFrame passing.
+- `test_cv_and_scaling.py`: Validates 95% CI cross-validation and unscaled tree models.
+- `test_tuning_calibration.py`: Tests `GridSearchCV` hyperparameter tuning and calibration.
+- `test_backtest_realism.py`: Tests slippage, commission friction, and next-day execution.
+- `test_packaging.py`: Confirms PEP 517/621 compliance and top-level package exports.
+- `test_secrets_management.py`: Verifies `.env` loading, secret masking, and `.gitignore` rules.
+
+To execute tests:
+```bash
+python -m pytest -v --tb=short
+```
+
+---
+
+## License
+
+This project is licensed under the MIT License - see [`pyproject.toml`](pyproject.toml) for details.

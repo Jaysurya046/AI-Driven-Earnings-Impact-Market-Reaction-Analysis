@@ -4,382 +4,174 @@
 
 ### Step 1: Install Dependencies
 ```bash
+# Production dependencies
 pip install -r requirements.txt
+
+# Or editable install with test & dev dependencies
+pip install -e ".[dev]"
 ```
 
-### Step 2: Run Quick Analysis
+### Step 2: Configure Secrets & Environment
+```bash
+cp .env.example .env
+```
+Customize `API_SECRET_KEY`, ticker lists, or port preferences in `.env` if desired.
+
+### Step 3: Verify the Test Suite
+```bash
+python -m pytest
+```
+Runs all 68 automated unit, integration, and security tests to ensure the platform is functioning correctly.
+
+### Step 4: Run Sanity Analysis
 ```bash
 python quick_start.py
 ```
-
-This will analyze 5 major tech stocks and generate all outputs.
+This runs a rapid in-memory analysis on 5 liquid stocks and verifies data ingestion, event studies, and model training.
 
 ---
 
-## Complete Setup (10 minutes)
+## Complete Setup & Operational Workflows
 
-### Step 1: Configure Your Analysis
-Edit `config.ini` to customize:
-- Stock tickers to analyze
-- Event window (±5 trading days is default)
-- Historical lookback period
-- Output directories
+### 1. Configure Your Quantitative Run
+Customize settings either in `.env` or in `config.ini`:
+- `tickers`: Stock universe to analyze (defaults to 20 liquid US large caps).
+- `event_window`: Trading days around announcement (default: ±5 trading days).
+- `estimation_window`: Historical baseline window (default: 60 trading days).
+- `lookback_years`: Historical price history length (default: 5 years).
 
-### Step 2: Run Full Pipeline
+### 2. Run Full Quantitative Pipeline (CLI)
 ```bash
 python main.py
 ```
+The orchestrated pipeline will execute in-memory:
+1. **Data Collection**: Ingests historical OHLCV and quarterly earnings via Yahoo Finance with MultiIndex normalization and exponential backoff retry logic.
+2. **Event Study**: Maps earnings dates to trading days and computes Cumulative Abnormal Returns (CAR) against historical mean returns.
+3. **Feature Engineering**: Calculates pure pre-announcement features (`SAFE_FEATURE_COLUMNS`) and performs a chronological time-series split.
+4. **Model Training & Evaluation**: Trains Logistic Regression, Random Forest, and unscaled XGBoost; runs CV with 95% confidence intervals; and serializes `.pkl` models and `.json` companion metadata.
+5. **Backtesting**: Simulates momentum and mean-reversion strategies under realistic commission friction and slippage basis points.
+6. **Reporting**: Generates summary statistics and high-resolution charts in `visualizations/`.
 
-The pipeline will automatically:
-1. Download historical data
-2. Fetch earnings announcement dates
-3. Analyze price movements
-4. Engineer features
-5. Train ML models
-6. Generate visualizations
-7. Create comprehensive report
-
-### Step 3: Explore Results
-All outputs saved in:
-- `data/` - Raw and processed data files
-- `models/` - Trained model files
-- `visualizations/` - Generated charts
-- `notebooks/` - Interactive Jupyter notebook
-
----
-
-## Using the Interactive Notebook
-
-### Open and Run Notebook
+### 3. Launch Interactive Streamlit Research Dashboard
 ```bash
-jupyter notebook notebooks/earnings_analysis.ipynb
+streamlit run src/streamlit_app.py
 ```
+Explore the interactive UI across multiple analytical tabs:
+- **Overview Dashboard**: Earnings surprise correlations, distribution plots, and CAR charts.
+- **ML Model Performance**: ROC curves, F1-scores, and feature importance rankings.
+- **Sector Analysis**: GICS sector-level comparisons and t-test statistics.
+- **Quantitative Backtest**: Strategy portfolio equity curves and drawdown metrics.
 
-The notebook allows you to:
-- Run analysis step-by-step
-- Modify parameters interactively
-- Explore data with custom visualizations
-- Train models with different settings
-- Understand the methodology
-
-### Key Notebook Sections
-1. **Import Libraries** - Load all required packages
-2. **Fetch Data** - Download stock prices and earnings data
-3. **Event Analysis** - Calculate returns and abnormal returns
-4. **Feature Engineering** - Create ML features
-5. **Model Training** - Train classification models
-6. **Evaluation** - Compare model performance
-7. **Visualization** - Create insights and charts
+### 4. Start the High-Throughput REST API
+```bash
+uvicorn api_server:app --host 0.0.0.0 --port 8000 --reload
+```
+Access the interactive OpenAPI documentation at `http://localhost:8000/docs`.
+- Real-time prediction: `POST /predict`
+- Background asynchronous pipeline run: `POST /analyze`
+- System state inspection: `GET /status`
 
 ---
 
-## Understanding the System
+## Core Methodological Concepts
 
-### Architecture Overview
+### 1. Trading-Day Exact Event Studies
+- Event window: $[-5, +5]$ trading days around earnings releases.
+- If an earnings report occurs after hours or over a weekend, the announcement day ($t=0$) is mapped to the immediate subsequent market session.
+- Pre-event baseline window: $[-60, -10]$ trading days computes expected baseline return and volatility.
 
-```
-Input Data (Yahoo Finance)
-         |
-         v
-DataCollector (data_collection.py)
-         |
-         v
-EventAnalyzer (event_analysis.py)
-    - Calculate returns
-    - Compute abnormal returns
-    - Measure volatility changes
-         |
-         v
-FeatureEngineer (feature_engineering.py)
-    - Create feature set
-    - Generate labels
-    - Prepare for ML
-         |
-         v
-ModelTrainer (ml_models.py)
-    - Train 3 models
-    - Evaluate performance
-    - Compare results
-         |
-         v
-Visualizer (visualizations.py)
-    - Create dashboards
-    - Generate charts
-    - Export insights
-         |
-         v
-Output (data/, models/, visualizations/)
-```
+### 2. Zero-Leakage Feature Isolation
+- Model inputs use only data known prior to the announcement date.
+- Post-event returns (`PostEventMomentum`, `PreVol_PostReturn`) are strictly excluded to ensure realistic evaluation without look-ahead bias.
 
-### Core Concepts
+### 3. Chronological Time-Series Partitioning
+- Avoids random train-test splits that cause future information leakage.
+- Earliest 80% of events form the training set; latest 20% form the out-of-sample test set.
 
-**Event Window**: ±5 trading days around earnings announcement
-- Day -5 to Day -1: Pre-event period
-- Day 0: Earnings announcement day
-- Day +1 to Day +5: Post-event period
-
-**Abnormal Returns**: Actual returns minus expected returns
-- Measures unexpected market reaction
-- Uses 60-day estimation window
-
-**Features**: Input variables for ML models
-- Earnings surprise %
-- Volatility changes
-- Volume spikes
-- Price momentum
-- Interaction terms
-
-**Labels**: Target variable (positive/negative reaction)
-- 1 = Post-event return > threshold
-- 0 = Post-event return ≤ threshold
+### 4. Realistic Backtest Frictions
+- **Broker Commissions**: Configurable fee percentage (e.g. 0.1%).
+- **Market Slippage**: Basis-point execution penalty (e.g. 5 bps) reflecting bid-ask spread costs.
+- **Next-Day Execution**: Orders execute at the opening price of the next trading day.
 
 ---
 
-## Customization Examples
+## Programmatic Usage Examples
 
-### Example 1: Analyze Different Stocks
+### Example 1: In-Memory Pipeline Execution
 ```python
+from src.config import load_config
 from main import EarningsAnalysisPipeline
 
-config = {
-    'lookback_years': 3,
-    'event_window': 3,
-    'estimation_window': 60,
-    'label_threshold': 1.0,  # Only very positive reactions
-    'data_dir': 'data',
-    'models_dir': 'models',
-    'viz_dir': 'visualizations'
-}
+config = load_config()
+pipeline = EarningsAnalysisPipeline(config.to_dict())
 
-tickers = ['JPM', 'GS', 'BAC']  # Banking stocks
-
-pipeline = EarningsAnalysisPipeline(config)
-pipeline.run_complete_pipeline(tickers)
+# In-memory execution without mandatory disk round-trips
+price_df, earnings_df = pipeline.step_1_collect_data(['AAPL', 'MSFT', 'GOOGL'])
+event_df = pipeline.step_2_event_analysis(price_df, earnings_df)
+features_df, labels = pipeline.step_3_feature_engineering(event_df)
+model_comparison = pipeline.step_4_train_models(features_df, labels)
 ```
 
-### Example 2: Longer Event Window
-```python
-from src.event_analysis import EventAnalyzer
-
-analyzer = EventAnalyzer(event_window=10, estimation_window=90)
-results = analyzer.analyze_multiple_events(price_data, earnings_data)
-```
-
-### Example 3: Custom Features
-```python
-from src.feature_engineering import FeatureEngineer
-
-engineer = FeatureEngineer()
-features = engineer.create_features(event_analysis)
-
-# Add custom feature
-features['CustomFeature'] = (
-    features['EarningsSurpriseAbs'] * 
-    features['VolatilityChangeRatio']
-)
-```
-
-### Example 4: Different ML Models
+### Example 2: Model Training with Cross-Validation & Metadata Saving
 ```python
 from src.ml_models import ModelTrainer
 
 trainer = ModelTrainer()
+# Cross-validation with 95% confidence intervals
+cv_report = trainer.evaluate_cv(trainer.models['random_forest'], X_train, y_train, cv=5)
+print("95% CI Accuracy:", cv_report['accuracy_ci_95'])
 
-# Train only specific models
-trainer.train_logistic_regression(X_train, y_train)
-trainer.train_random_forest(X_train, y_train, n_estimators=200)
+# Save model pickle with companion metadata JSON
+trainer.save_model(
+    'random_forest',
+    'models/rf_model.pkl',
+    feature_columns=feature_cols,
+    metadata={'cv_report': cv_report}
+)
 ```
 
----
-
-## Understanding the Outputs
-
-### Data Files
-
-**raw_price_data.csv**
-- Historical OHLCV data
-- 250+ trading days per stock per year
-- Used for analysis and feature calculation
-
-**raw_earnings_data.csv**
-- Earnings announcement dates
-- Reported vs expected EPS
-- Used to identify event windows
-
-**event_analysis.csv**
-- Returns before and after earnings
-- Cumulative abnormal returns (CAR)
-- Volatility and volume metrics
-- Ready for ML modeling
-
-**engineered_features.csv**
-- All ML features
-- Labels (0 = negative, 1 = positive)
-- Ready for model training
-
-**model_comparison.csv**
-- Performance metrics for all 3 models
-- Accuracy, Precision, Recall, F1-Score
-- AUC-ROC scores
-
-### Visualization Files
-
-**01_surprise_vs_reaction.png**
-- Scatter plot of earnings surprise vs post-event returns
-- Shows market efficiency
-- Trend line indicates pattern strength
-
-**02_model_comparison.png**
-- Bar charts comparing model performance
-- Helps identify best model
-- Shows metric trade-offs
-
-**03_volatility_analysis.png**
-- Pre/during/post event volatility
-- Shows risk increase
-- Indicates event significance
-
-**04_volume_analysis.png**
-- Volume spikes around earnings
-- Identifies trading activity patterns
-- Measures market engagement
-
-**05_feature_importance_*.png**
-- Top predictive features
-- Shows what drives predictions
-- Helps interpret model decisions
-
-### Final Report
-
-**final_report.txt**
-- Executive summary
-- Key statistics
-- Findings and conclusions
-- Investment recommendations
-
----
-
-## Troubleshooting
-
-### Issue: "No data found" for a stock
-**Cause**: Stock may not have earnings data on Yahoo Finance
-**Solution**: Use different tickers (AAPL, MSFT, GOOGL work well)
-
-### Issue: "Insufficient data for event window"
-**Cause**: Not enough historical data before/after event
-**Solution**: 
-- Increase estimation_window
-- Decrease event_window
-- Use more recent stocks with longer history
-
-### Issue: Low model accuracy
-**Cause**: Market reactions may be unpredictable or random
-**Solution**:
-- Try different thresholds
-- Use different stocks
-- Increase feature engineering
-- Try ensemble methods
-
-### Issue: "Import error" when running
-**Cause**: Missing dependencies
-**Solution**:
-```bash
-pip install --upgrade -r requirements.txt
-```
-
-### Issue: Plots not showing in Jupyter
-**Cause**: Matplotlib backend not configured
-**Solution**: Add at start of notebook:
+### Example 3: Backtesting with Slippage & Commissions
 ```python
-%matplotlib inline
+from src.backtesting import Backtester
+
+backtester = Backtester(
+    initial_capital=100000.0,
+    commission_rate=0.001,      # 10 bps broker commission
+    slippage_bps=5.0,           # 5 bps slippage
+    next_day_open=True
+)
+results = backtester.run_momentum_strategy(event_df)
+print(f"Total Return: {results['total_return']:.2%}")
+print(f"Max Drawdown: {results['max_drawdown']:.2%}")
 ```
 
 ---
 
-## Performance Tips
+## Troubleshooting Guide
 
-### For Faster Analysis
-- Reduce `lookback_years` (e.g., 2 instead of 5)
-- Reduce number of stocks
-- Use `quick_start.py` instead of `main.py`
+### Issue: "Yahoo Finance MultiIndex column format error"
+- **Resolution**: Fully resolved in `DataCollector` via automatic multi-level column flattening and timezone normalization.
 
-### For Better Results
-- Use 5+ years of data
-- Include 20+ stocks from different sectors
-- Increase `estimation_window` (e.g., 90 days)
-- Engineer domain-specific features
+### Issue: "Data leakage or artificially inflated test accuracy"
+- **Resolution**: Fixed in `src/feature_engineering.py`. All post-event features are blocked via `SAFE_FEATURE_COLUMNS` and evaluated strictly on chronologically held-out test splits.
 
-### For Production Use
-- Save trained models: `trainer.save_model('Random Forest', 'model.pkl')`
-- Export data to database (not just CSV)
-- Implement real-time monitoring
-- Set up automated retraining
+### Issue: "FastAPI JSON serialization error on NaN floats"
+- **Resolution**: Handled in `api_server.py` via `_safe_float()`, which sanitizes IEEE 754 `NaN` values before response delivery.
+
+### Issue: "Concurrent API calls collision"
+- **Resolution**: Handled by `AnalysisStateManager` using `asyncio.Lock()`, queuing parallel requests safely.
 
 ---
 
-## Next Steps
+## Running the Automated Test Suite
 
-1. **Run Analysis**: Execute `python quick_start.py`
-2. **Explore Results**: Check `data/` and `visualizations/` folders
-3. **Review Notebook**: Open and run `notebooks/earnings_analysis.ipynb`
-4. **Customize**: Modify `config.ini` with your stocks
-5. **Extend**: Add custom features or models
+```bash
+# Run all 68 tests
+python -m pytest
 
----
+# Run with verbose output and short tracebacks
+python -m pytest -v --tb=short
 
-## Resources
-
-### Documentation
-- See [README.md](README.md) for complete documentation
-- Check comments in source code for implementation details
-- Review this guide for getting started
-
-### Key Files
-- [main.py](main.py) - Main analysis pipeline
-- [quick_start.py](quick_start.py) - Simple example
-- [config.ini](config.ini) - Configuration settings
-- [notebooks/earnings_analysis.ipynb](notebooks/earnings_analysis.ipynb) - Interactive notebook
-
-### Data Sources
-- **Prices**: Yahoo Finance API (via yfinance)
-- **Earnings**: Yahoo Finance earnings dates
-- **Features**: Calculated from price/volume data
-
----
-
-## Support & Help
-
-If you encounter issues:
-1. Check this guide's Troubleshooting section
-2. Review the README.md for detailed API docs
-3. Check source code comments for implementation details
-4. Verify all dependencies are installed
-5. Ensure valid stock tickers are used
-
----
-
-## Tips for Best Results
-
-1. **Use Quality Data**
-   - Prefer large-cap stocks (have more data)
-   - Use stocks with consistent earnings announcements
-   - Verify data completeness
-
-2. **Understand the Metrics**
-   - CAR = cumulative abnormal returns
-   - Volatility = std dev of daily returns
-   - Volume spike = post-event volume / estimation volume
-
-3. **Interpret Results**
-   - Model accuracy reflects market efficiency
-   - Feature importance shows market drivers
-   - Visualizations reveal patterns
-
-4. **Validate Findings**
-   - Test on out-of-sample data
-   - Compare across multiple stocks
-   - Consider sector-specific effects
-
----
-
-**Happy analyzing!** 📊📈
+# Run specific domain test
+python -m pytest tests/test_feature_leakage.py
+```
