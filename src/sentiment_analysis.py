@@ -107,6 +107,15 @@ class SentimentAnalyzer:
                 'neutral': scores['neu'],
                 'negative': scores['neg']
             }
+
+        return {
+            'polarity': 0.0,
+            'subjectivity': 0.0,
+            'compound': 0.0,
+            'positive': 0.0,
+            'neutral': 1.0,
+            'negative': 0.0
+        }
     
     def analyze_multiple_texts(self, texts: List[str]) -> pd.DataFrame:
         """

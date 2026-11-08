@@ -5,7 +5,7 @@ Tests trading strategies based on earnings signals
 
 import pandas as pd
 import numpy as np
-from typing import Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 import logging
 from datetime import datetime
 
@@ -38,10 +38,10 @@ class Backtester:
         self.next_day_execution = next_day_execution
         
         self.capital = initial_capital
-        self.positions = {}
-        self.trades = []
-        self.portfolio_values = []
-        self.results = None
+        self.positions: Dict[str, Any] = {}
+        self.trades: List[Dict[str, Any]] = []
+        self.portfolio_values: List[Dict[str, Any]] = []
+        self.results: Optional[Dict[str, Any]] = None
     
     def reset(self):
         """Reset backtester state"""

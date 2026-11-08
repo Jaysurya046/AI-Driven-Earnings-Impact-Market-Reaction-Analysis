@@ -7,7 +7,7 @@ Loads sensitive configurations and secrets from .env via python-dotenv.
 import configparser
 import os
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Union
+from typing import Any, Dict, List, Optional, Tuple, Union
 
 try:
     from dotenv import load_dotenv
@@ -191,7 +191,7 @@ def load_config(
                 cfg['api_secret_key'] = sec.get('api_secret_key')
 
     # 4. Override with Environment Variables
-    env_mappings = {
+    env_mappings: Dict[str, Tuple[str, Any]] = {
         'LOOKBACK_YEARS': ('lookback_years', int),
         'TICKERS': ('tickers', _parse_list),
         'EVENT_WINDOW': ('event_window', int),

@@ -5,7 +5,7 @@ Advanced deep learning models for earnings impact prediction
 
 import pandas as pd
 import numpy as np
-from typing import Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 import logging
 from pathlib import Path
 
@@ -31,9 +31,9 @@ class LSTMPredictor:
         self.sequence_length = sequence_length
         self.lstm_units = lstm_units
         self.dropout_rate = dropout_rate
-        self.model = None
-        self.scaler = None
-        self.history = None
+        self.model: Any = None
+        self.scaler: Any = None
+        self.history: Any = None
     
     def _check_tensorflow(self):
         """Check if TensorFlow is available"""

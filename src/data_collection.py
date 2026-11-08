@@ -58,6 +58,7 @@ def retry_call(
                 logger.error(f"{description} failed after {max_retries} attempts: {e}")
     if last_exception:
         raise last_exception
+    raise RuntimeError(f"{description} failed after {max_retries} attempts")
 
 
 class DataCollector:
