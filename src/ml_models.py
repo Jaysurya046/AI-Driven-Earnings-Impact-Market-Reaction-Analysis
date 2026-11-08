@@ -12,7 +12,8 @@ from sklearn.metrics import (
     accuracy_score, precision_score, recall_score, f1_score,
     confusion_matrix, classification_report, roc_auc_score, roc_curve
 )
-from sklearn.model_selection import TimeSeriesSplit, StratifiedKFold
+from sklearn.model_selection import TimeSeriesSplit, StratifiedKFold, GridSearchCV
+from sklearn.calibration import CalibratedClassifierCV
 import sklearn
 import xgboost as xgb
 from typing import Dict, Tuple, List, Optional, Union, Callable, Any
@@ -36,6 +37,7 @@ class ModelTrainer:
         self.results = {}
         self.feature_columns = {}
         self.metadata = {}
+        self.calibrated_models = {}
     
     def train_logistic_regression(
         self,
@@ -403,6 +405,135 @@ class ModelTrainer:
             cv_results.append(res)
             
         return pd.DataFrame(cv_results)
+
+    def tune_hyperparameters(
+        self,
+        model_name: str,
+        X_train: np.ndarray,
+        y_train: np.ndarray,
+        cv: int = 3,
+        param_grid: Optional[Dict] = None,
+        scoring: str = "f1",
+        time_series: bool = True
+    ) -> Tuple[Any, Dict]:
+        """
+        Tune hyperparameters using cross-validation within training folds.
+        
+        Args:
+            model_name: One of 'Logistic Regression', 'Random Forest', 'XGBoost'
+            X_train: Training feature matrix
+            y_train: Training labels
+            cv: Number of CV folds for tuning
+            param_grid: Custom parameter grid dictionary (optional)
+            scoring: Metric to optimize ('f1', 'accuracy', etc.)
+            time_series: Whether to use TimeSeriesSplit for CV
+            
+        Returns:
+            Tuple of (best_estimator, best_params_dict)
+        """
+        n_samples = len(X_train)
+        effective_cv = min(cv, max(2, n_samples // 2))
+        cv_splitter = (
+            TimeSeriesSplit(n_splits=effective_cv)
+            if time_series
+            else StratifiedKFold(n_splits=effective_cv, shuffle=True, random_state=42)
+        )
+
+        if model_name == "Logistic Regression":
+            base = LogisticRegression(max_iter=1000, random_state=42)
+            grid = param_grid or {'C': [0.1, 1.0, 10.0]}
+        elif model_name == "Random Forest":
+            base = RandomForestClassifier(random_state=42, n_jobs=-1)
+            grid = param_grid or {'n_estimators': [20, 50], 'max_depth': [3, 5, None]}
+        elif model_name == "XGBoost":
+            base = xgb.XGBClassifier(random_state=42, verbosity=0)
+            grid = param_grid or {'n_estimators': [20, 50], 'max_depth': [3, 5]}
+        else:
+            raise ValueError(f"Unsupported model name for tuning: {model_name}")
+
+        search = GridSearchCV(
+            estimator=base,
+            param_grid=grid,
+            cv=cv_splitter,
+            scoring=scoring,
+            refit=True,
+            n_jobs=1
+        )
+        search.fit(X_train, y_train)
+        logger.info(f"Hyperparameter tuning for {model_name} completed. Best params: {search.best_params_}")
+        return search.best_estimator_, search.best_params_
+
+    def calibrate_probabilities(
+        self,
+        model_name: str,
+        X_val: np.ndarray,
+        y_val: np.ndarray,
+        method: str = "sigmoid"
+    ) -> CalibratedClassifierCV:
+        """
+        Calibrate model prediction probabilities using Platt scaling ('sigmoid') or isotonic regression.
+        Essential for reliable position sizing and probability thresholding.
+        
+        Args:
+            model_name: Name of model in self.models
+            X_val: Validation features (unseen during base training)
+            y_val: Validation labels
+            method: 'sigmoid' or 'isotonic'
+            
+        Returns:
+            Fitted CalibratedClassifierCV instance
+        """
+        if model_name not in self.models:
+            raise ValueError(f"Model {model_name} not found in trained models.")
+
+        base_model = self.models[model_name]
+        scaler = self.scalers.get(model_name)
+        X_val_scaled = scaler.transform(X_val) if scaler is not None else X_val
+
+        try:
+            from sklearn.frozen import FrozenEstimator
+            calibrator = CalibratedClassifierCV(
+                estimator=FrozenEstimator(base_model),
+                method=method
+            )
+        except ImportError:
+            calibrator = CalibratedClassifierCV(
+                estimator=base_model,
+                method=method,
+                cv="prefit"
+            )
+        calibrator.fit(X_val_scaled, y_val)
+        self.calibrated_models[model_name] = calibrator
+        logger.info(f"Model {model_name} probabilities calibrated using {method} scaling.")
+        return calibrator
+
+    def predict_proba_calibrated(
+        self,
+        model_name: str,
+        X: Union[pd.DataFrame, np.ndarray]
+    ) -> np.ndarray:
+        """
+        Get calibrated probabilities for positive class (useful for position sizing).
+        """
+        if model_name not in self.calibrated_models:
+            raise ValueError(f"No calibrated model found for '{model_name}'. Call calibrate_probabilities first.")
+
+        calibrator = self.calibrated_models[model_name]
+        scaler = self.scalers.get(model_name)
+
+        if isinstance(X, pd.DataFrame):
+            expected_cols = self.feature_columns.get(model_name)
+            if expected_cols:
+                X_mat = X[expected_cols].values
+            else:
+                X_mat = X.values
+        else:
+            X_mat = np.asarray(X)
+
+        if scaler is not None:
+            X_mat = scaler.transform(X_mat)
+
+        return calibrator.predict_proba(X_mat)[:, 1]
     
     def save_model(
         self,
