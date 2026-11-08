@@ -361,20 +361,12 @@ class EarningsAnalysisPipeline:
 
 
 if __name__ == "__main__":
-    # Configuration
-    config = {
-        'lookback_years': 5,
-        'event_window': 5,
-        'estimation_window': 60,
-        'label_threshold': 0.0,
-        'data_dir': 'data',
-        'models_dir': 'models',
-        'viz_dir': 'visualizations'
-    }
+    from src.config import load_config
     
-    # List of stocks to analyze (modify as needed)
-    tickers = ['AAPL', 'MSFT', 'GOOGL', 'AMZN', 'TSLA', 'META', 'NVDA']
+    # Load configuration from config.ini, environment, and defaults
+    config = load_config()
+    tickers = config.get('tickers', ['AAPL', 'MSFT', 'GOOGL', 'AMZN', 'TSLA', 'META', 'NVDA'])
     
     # Run pipeline
-    pipeline = EarningsAnalysisPipeline(config)
+    pipeline = EarningsAnalysisPipeline(config.to_dict())
     pipeline.run_complete_pipeline(tickers)
