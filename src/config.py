@@ -17,7 +17,10 @@ except ImportError:
 
 DEFAULT_CONFIG: Dict[str, Any] = {
     'lookback_years': 5,
-    'tickers': ['AAPL', 'MSFT', 'GOOGL', 'AMZN', 'TSLA', 'META', 'NVDA', 'JPM', 'JNJ', 'PG'],
+    'tickers': [
+        'AAPL', 'MSFT', 'GOOGL', 'AMZN', 'TSLA', 'META', 'NVDA', 'JPM', 'JNJ', 'PG',
+        'V', 'UNH', 'HD', 'BAC', 'MA', 'XOM', 'DIS', 'CSCO', 'PFE', 'NFLX'
+    ],
     'event_window': 5,
     'estimation_window': 60,
     'label_threshold': 0.0,
