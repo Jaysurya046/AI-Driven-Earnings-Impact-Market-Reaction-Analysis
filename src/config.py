@@ -46,6 +46,17 @@ def _parse_list(val: str) -> List[str]:
     return [item.strip() for item in val.split(',') if item.strip()]
 
 
+def mask_secrets(config_dict: Dict[str, Any]) -> Dict[str, Any]:
+    """Return a dictionary copy with sensitive keys masked."""
+    masked: Dict[str, Any] = {}
+    for k, v in config_dict.items():
+        if any(secret in k.lower() for secret in ['secret', 'key', 'token', 'password']):
+            masked[k] = '***' if v else ''
+        else:
+            masked[k] = v
+    return masked
+
+
 class AppConfig:
     """Unified configuration container with dict-like and attribute access."""
 
@@ -71,12 +82,7 @@ class AppConfig:
 
     def __repr__(self) -> str:
         # Mask sensitive keys in representation
-        masked = {}
-        for k, v in self._data.items():
-            if any(secret in k.lower() for secret in ['secret', 'key', 'token', 'password']):
-                masked[k] = '***' if v else ''
-            else:
-                masked[k] = v
+        masked = mask_secrets(self._data)
         return f"AppConfig({masked})"
 
 

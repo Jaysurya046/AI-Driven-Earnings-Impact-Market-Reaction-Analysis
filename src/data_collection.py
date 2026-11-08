@@ -368,3 +368,7 @@ class DataCollector:
         except Exception as e:
             logger.error(f"Error saving to CSV: {str(e)}")
 
+
+validate_collected_data = DataCollector.validate_collected_data
+
+
