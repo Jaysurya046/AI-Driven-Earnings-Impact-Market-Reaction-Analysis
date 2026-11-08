@@ -3,21 +3,10 @@ Quick Start Example
 Demonstrates how to use the earnings analysis system
 """
 
+from src import load_config
 from main import EarningsAnalysisPipeline
 
-# Define configuration
-config = {
-    'lookback_years': 5,
-    'event_window': 5,
-    'estimation_window': 60,
-    'label_threshold': 0.0,
-    'data_dir': 'data',
-    'models_dir': 'models',
-    'viz_dir': 'visualizations'
-}
-
 # Define tickers to analyze
-# You can modify this list based on your interest
 tickers = [
     'AAPL',  # Apple
     'MSFT',  # Microsoft
@@ -26,14 +15,10 @@ tickers = [
     'TSLA',  # Tesla
 ]
 
-# Initialize and run pipeline
 if __name__ == "__main__":
-    pipeline = EarningsAnalysisPipeline(config)
+    # Load unified configuration (config.ini, .env, and system environment variables)
+    config = load_config()
+    pipeline = EarningsAnalysisPipeline(config.to_dict())
     
     # Run complete analysis
     pipeline.run_complete_pipeline(tickers)
-    
-    # Access results programmatically
-    # print(pipeline.event_analysis)
-    # print(pipeline.features)
-    # print(pipeline.model_trainer.results)
