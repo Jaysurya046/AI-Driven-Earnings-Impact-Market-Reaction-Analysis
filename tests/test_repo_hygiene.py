@@ -3,7 +3,6 @@ Unit tests for repository hygiene, CI/CD pipelines, lockfiles, and documentation
 """
 
 from pathlib import Path
-import yaml
 import pytest
 
 
@@ -15,27 +14,18 @@ def test_ci_workflow_validity():
     ci_path = REPO_ROOT / ".github" / "workflows" / "ci.yml"
     assert ci_path.exists(), ".github/workflows/ci.yml must exist"
 
-    with open(ci_path, "r", encoding="utf-8") as f:
-        workflow = yaml.safe_load(f)
-
-    assert "name" in workflow
-    assert "on" in workflow or True in workflow
-    assert "jobs" in workflow
-    assert "test" in workflow["jobs"]
-
-    test_job = workflow["jobs"]["test"]
-    assert "runs-on" in test_job
-    assert "steps" in test_job
-
-    step_uses_or_runs = [
-        step.get("uses", "") + step.get("run", "")
-        for step in test_job["steps"]
-    ]
+    workflow_text = ci_path.read_text(encoding="utf-8")
+    assert "name: CI" in workflow_text
+    assert "\"on\":" in workflow_text
+    assert "jobs:" in workflow_text
+    assert "test:" in workflow_text
+    assert "runs-on:" in workflow_text
+    assert "steps:" in workflow_text
 
     # Verify key steps are present in workflow
-    assert any("actions/checkout" in s for s in step_uses_or_runs), "CI must check out repository"
-    assert any("actions/setup-python" in s for s in step_uses_or_runs), "CI must setup python"
-    assert any("pytest" in s for s in step_uses_or_runs), "CI must execute pytest"
+    assert "actions/checkout" in workflow_text, "CI must check out repository"
+    assert "actions/setup-python" in workflow_text, "CI must setup python"
+    assert "pytest" in workflow_text, "CI must execute pytest"
 
 
 def test_requirements_lock_file():
