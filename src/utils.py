@@ -91,9 +91,9 @@ def handle_missing_values(
         numeric_columns = df.select_dtypes(include=[np.number]).columns
     
     if strategy == 'forward_fill':
-        df[numeric_columns] = df[numeric_columns].fillna(method='ffill')
+        df[numeric_columns] = df[numeric_columns].ffill()
     elif strategy == 'backward_fill':
-        df[numeric_columns] = df[numeric_columns].fillna(method='bfill')
+        df[numeric_columns] = df[numeric_columns].bfill()
     elif strategy == 'mean':
         df[numeric_columns] = df[numeric_columns].fillna(df[numeric_columns].mean())
     elif strategy == 'drop':
