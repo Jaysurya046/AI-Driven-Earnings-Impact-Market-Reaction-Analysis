@@ -163,18 +163,16 @@ class EarningsAnalysisPipeline:
         logger.info("STEP 4: MACHINE LEARNING MODELING")
         logger.info("=" * 80)
         
-        # Prepare training data
-        feature_columns = [col for col in self.features.columns if col not in 
-                          ['Ticker', 'EarningsDate', 'PostEventReturn', 'PreEventReturn', 
-                           'EPS', 'SurprisePercentage', 'DataPointsInWindow', 'DataPointsInEstimation']]
-        
-        X_train, X_test, y_train, y_test = self.feature_engineer.prepare_train_test_data(
-            self.features,
-            self.labels,
-            feature_columns=feature_columns,
-            test_size=0.2,
-            random_state=42
-        )
+        # Prepare training data (feature list comes from the single source of
+        # truth in FeatureEngineer, which excludes leaky post-event columns)
+        X_train, X_test, y_train, y_test, feature_columns = \
+            self.feature_engineer.prepare_train_test_data(
+                self.features,
+                self.labels,
+                test_size=self.config.get('test_size', 0.2),
+                random_state=self.config.get('random_state', 42),
+                chronological=True
+            )
         
         logger.info(f"Training set size: {len(X_train)}")
         logger.info(f"Test set size: {len(X_test)}")
@@ -232,10 +230,8 @@ class EarningsAnalysisPipeline:
         best_model = self.model_trainer.models[best_model_name]
         scaler = self.model_trainer.scalers[best_model_name]
         
-        # Prepare features again for importance
-        feature_columns = [col for col in self.features.columns if col not in 
-                          ['Ticker', 'EarningsDate', 'PostEventReturn', 'PreEventReturn', 
-                           'EPS', 'SurprisePercentage', 'DataPointsInWindow', 'DataPointsInEstimation']]
+        # Use the centralized safe feature list (no duplicated exclusion lists)
+        feature_columns = self.feature_engineer.get_feature_columns(self.features)
         
         importance_df = self.feature_engineer.get_feature_importance_df(best_model, feature_columns)
         
