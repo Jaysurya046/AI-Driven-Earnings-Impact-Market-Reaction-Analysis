@@ -56,6 +56,7 @@ dev = [
     "httpx>=0.24.0",
     "ruff>=0.1.0",
     "mypy>=1.5.0",
+    "tomli>=1.1.0;python_version<'3.11'",
 ]
 dashboard = [
     "streamlit>=1.28.0",
