@@ -7,7 +7,7 @@ import pandas as pd
 import numpy as np
 from pathlib import Path
 import logging
-from typing import Tuple, List
+from typing import Tuple, List, Optional
 
 from src.data_collection import DataCollector
 from src.event_analysis import EventAnalyzer
@@ -58,6 +58,8 @@ class EarningsAnalysisPipeline:
         self.event_analysis = None
         self.features = None
         self.labels = None
+        self.model_comparison = None
+        self.save_intermediate = config.get('save_intermediate', True)
     
     def step_1_collect_data(self, tickers: List[str]) -> Tuple[pd.DataFrame, pd.DataFrame]:
         """
@@ -78,25 +80,34 @@ class EarningsAnalysisPipeline:
         # Validate data shapes and schema immediately after collection
         self.data_collector.validate_collected_data(self.price_data, self.earnings_data)
         
-        # Save raw data
-        self.data_collector.save_to_csv(
-            self.price_data,
-            self.data_dir / 'raw_price_data.csv'
-        )
-        self.data_collector.save_to_csv(
-            self.earnings_data,
-            self.data_dir / 'raw_earnings_data.csv'
-        )
+        # Save raw data if intermediate saving enabled
+        if self.save_intermediate:
+            self.data_collector.save_to_csv(
+                self.price_data,
+                self.data_dir / 'raw_price_data.csv'
+            )
+            self.data_collector.save_to_csv(
+                self.earnings_data,
+                self.data_dir / 'raw_earnings_data.csv'
+            )
         
         logger.info(f"Collected {len(self.price_data)} price records for {len(tickers)} stocks")
         logger.info(f"Collected {len(self.earnings_data)} earnings records")
         
         return self.price_data, self.earnings_data
     
-    def step_2_event_analysis(self) -> pd.DataFrame:
+    def step_2_event_analysis(
+        self,
+        price_data: Optional[pd.DataFrame] = None,
+        earnings_data: Optional[pd.DataFrame] = None
+    ) -> pd.DataFrame:
         """
         Step 2: Analyze price movements around earnings events
         
+        Args:
+            price_data: Optional in-memory price DataFrame
+            earnings_data: Optional in-memory earnings DataFrame
+            
         Returns:
             DataFrame with event analysis results
         """
@@ -104,16 +115,25 @@ class EarningsAnalysisPipeline:
         logger.info("STEP 2: EVENT-BASED ANALYSIS")
         logger.info("=" * 80)
         
+        prices = price_data if price_data is not None else self.price_data
+        earnings = earnings_data if earnings_data is not None else self.earnings_data
+        
+        if prices is None or earnings is None:
+            raise ValueError("Price data and earnings data must be provided or collected first.")
+        
+        self.price_data = prices
+        self.earnings_data = earnings
+        
         self.event_analysis = self.event_analyzer.analyze_multiple_events(
-            self.price_data,
-            self.earnings_data
+            prices,
+            earnings
         )
         
-        # Save event analysis
-        self.event_analysis.to_csv(
-            self.data_dir / 'event_analysis.csv',
-            index=False
-        )
+        if self.save_intermediate:
+            self.event_analysis.to_csv(
+                self.data_dir / 'event_analysis.csv',
+                index=False
+            )
         
         logger.info(f"Analyzed {len(self.event_analysis)} earnings events")
         logger.info(f"\nSummary Statistics:")
@@ -124,10 +144,16 @@ class EarningsAnalysisPipeline:
         
         return self.event_analysis
     
-    def step_3_feature_engineering(self) -> Tuple[pd.DataFrame, pd.Series]:
+    def step_3_feature_engineering(
+        self,
+        event_analysis: Optional[pd.DataFrame] = None
+    ) -> Tuple[pd.DataFrame, pd.Series]:
         """
         Step 3: Engineer features for ML models
         
+        Args:
+            event_analysis: Optional in-memory event analysis DataFrame
+            
         Returns:
             Tuple of (features_df, labels_series)
         """
@@ -135,19 +161,24 @@ class EarningsAnalysisPipeline:
         logger.info("STEP 3: FEATURE ENGINEERING")
         logger.info("=" * 80)
         
-        self.features = self.feature_engineer.create_features(self.event_analysis)
+        ea = event_analysis if event_analysis is not None else self.event_analysis
+        if ea is None:
+            raise ValueError("Event analysis data must be provided or computed first.")
+        self.event_analysis = ea
+        
+        self.features = self.feature_engineer.create_features(ea)
         self.labels = self.feature_engineer.create_binary_labels(
-            self.event_analysis,
+            ea,
             threshold=self.config.get('label_threshold', 0.0)
         )
         
-        # Save features
-        self.features.to_csv(
-            self.data_dir / 'engineered_features.csv',
-            index=False
-        )
+        if self.save_intermediate:
+            self.features.to_csv(
+                self.data_dir / 'engineered_features.csv',
+                index=False
+            )
         
-        logger.info(f"Created {len(self.features.columns) - len(self.event_analysis.columns)} new features")
+        logger.info(f"Created {len(self.features.columns) - len(ea.columns)} new features")
         logger.info(f"Feature set shape: {self.features.shape}")
         logger.info(f"\nLabel Distribution:")
         logger.info(f"  Positive reactions: {(self.labels == 1).sum()} ({(self.labels == 1).sum() / len(self.labels) * 100:.1f}%)")
@@ -155,10 +186,18 @@ class EarningsAnalysisPipeline:
         
         return self.features, self.labels
     
-    def step_4_train_models(self) -> pd.DataFrame:
+    def step_4_train_models(
+        self,
+        features: Optional[pd.DataFrame] = None,
+        labels: Optional[pd.Series] = None
+    ) -> pd.DataFrame:
         """
         Step 4: Train ML models
         
+        Args:
+            features: Optional in-memory features DataFrame
+            labels: Optional in-memory labels Series
+            
         Returns:
             DataFrame with model comparison results
         """
@@ -166,12 +205,20 @@ class EarningsAnalysisPipeline:
         logger.info("STEP 4: MACHINE LEARNING MODELING")
         logger.info("=" * 80)
         
+        feats = features if features is not None else self.features
+        lbls = labels if labels is not None else self.labels
+        
+        if feats is None or lbls is None:
+            raise ValueError("Features and labels must be provided or engineered first.")
+        self.features = feats
+        self.labels = lbls
+        
         # Prepare training data (feature list comes from the single source of
         # truth in FeatureEngineer, which excludes leaky post-event columns)
         X_train, X_test, y_train, y_test, feature_columns = \
             self.feature_engineer.prepare_train_test_data(
-                self.features,
-                self.labels,
+                feats,
+                lbls,
                 test_size=self.config.get('test_size', 0.2),
                 random_state=self.config.get('random_state', 42),
                 chronological=True
@@ -181,84 +228,99 @@ class EarningsAnalysisPipeline:
         logger.info(f"Test set size: {len(X_test)}")
         logger.info(f"Features used: {len(feature_columns)}")
         
-        # Train models
+        # Train models in memory
         model_comparison = self.model_trainer.train_all_models(X_train, X_test, y_train, y_test)
+        self.model_comparison = model_comparison
         
-        # Save comparison
-        model_comparison.to_csv(
-            self.data_dir / 'model_comparison.csv',
-            index=False
-        )
-
-        # Save trained models with metadata
-        for model_name in self.model_trainer.models:
-            clean_name = model_name.lower().replace(' ', '_')
-            self.model_trainer.save_model(
-                model_name=model_name,
-                filepath=self.models_dir / f"{clean_name}.pkl",
-                feature_columns=feature_columns
+        if self.save_intermediate:
+            model_comparison.to_csv(
+                self.data_dir / 'model_comparison.csv',
+                index=False
             )
+
+            # Save trained models with metadata
+            for model_name in self.model_trainer.models:
+                clean_name = model_name.lower().replace(' ', '_')
+                self.model_trainer.save_model(
+                    model_name=model_name,
+                    filepath=self.models_dir / f"{clean_name}.pkl",
+                    feature_columns=feature_columns
+                )
         
         logger.info("\nModel Comparison Results:")
         logger.info(model_comparison.to_string())
         
         return model_comparison
     
-    def step_5_visualizations(self) -> None:
+    def step_5_visualizations(
+        self,
+        event_analysis: Optional[pd.DataFrame] = None,
+        model_comparison: Optional[pd.DataFrame] = None
+    ) -> None:
         """
-        Step 5: Generate visualizations
+        Step 5: Generate visualizations using in-memory DataFrames
         """
         logger.info("\n" + "=" * 80)
         logger.info("STEP 5: VISUALIZATIONS & DASHBOARDS")
         logger.info("=" * 80)
         
+        ea = event_analysis if event_analysis is not None else self.event_analysis
+        mc = model_comparison if model_comparison is not None else self.model_comparison
+        
+        if mc is None and (self.data_dir / 'model_comparison.csv').exists():
+            mc = pd.read_csv(self.data_dir / 'model_comparison.csv')
+            
+        if ea is None or mc is None:
+            logger.warning("Missing event_analysis or model_comparison for visualizations. Skipping.")
+            return
+        
         # Plot 1: Surprise vs Reaction
         self.visualizer.plot_surprise_vs_reaction(
-            self.event_analysis,
+            ea,
             save_path=self.viz_dir / '01_surprise_vs_reaction.png'
         )
         
-        # Plot 2: Model Comparison
-        model_comparison = pd.read_csv(self.data_dir / 'model_comparison.csv')
+        # Plot 2: Model Comparison (uses in-memory DataFrame)
         self.visualizer.plot_model_comparison(
-            model_comparison,
+            mc,
             save_path=self.viz_dir / '02_model_comparison.png'
         )
         
         # Plot 3: Volatility Analysis
         self.visualizer.plot_volatility_analysis(
-            self.event_analysis,
+            ea,
             save_path=self.viz_dir / '03_volatility_analysis.png'
         )
         
         # Plot 4: Volume Analysis
         self.visualizer.plot_volume_analysis(
-            self.event_analysis,
+            ea,
             save_path=self.viz_dir / '04_volume_analysis.png'
         )
         
         # Plot 5: Feature Importance (for best model)
-        best_model_name = model_comparison.loc[model_comparison['F1-Score'].idxmax(), 'Model']
-        best_model = self.model_trainer.models[best_model_name]
-        scaler = self.model_trainer.scalers[best_model_name]
-        
-        # Use the centralized safe feature list (no duplicated exclusion lists)
-        feature_columns = self.feature_engineer.get_feature_columns(self.features)
-        
-        importance_df = self.feature_engineer.get_feature_importance_df(best_model, feature_columns)
-        
-        if not importance_df.empty:
-            self.visualizer.plot_feature_importance(
-                importance_df,
-                top_n=15,
-                save_path=self.viz_dir / f'05_feature_importance_{best_model_name}.png'
-            )
+        best_model_name = mc.loc[mc['F1-Score'].idxmax(), 'Model']
+        if best_model_name in self.model_trainer.models:
+            best_model = self.model_trainer.models[best_model_name]
+            feature_columns = self.feature_engineer.get_feature_columns(self.features)
+            importance_df = self.feature_engineer.get_feature_importance_df(best_model, feature_columns)
+            
+            if not importance_df.empty:
+                self.visualizer.plot_feature_importance(
+                    importance_df,
+                    top_n=15,
+                    save_path=self.viz_dir / f'05_feature_importance_{best_model_name}.png'
+                )
         
         logger.info(f"Visualizations saved to {self.viz_dir}")
     
-    def step_6_insights_report(self) -> str:
+    def step_6_insights_report(
+        self,
+        event_analysis: Optional[pd.DataFrame] = None,
+        model_comparison: Optional[pd.DataFrame] = None
+    ) -> str:
         """
-        Step 6: Generate insights report
+        Step 6: Generate insights report using in-memory DataFrames
         
         Returns:
             Report string with key insights
@@ -267,6 +329,15 @@ class EarningsAnalysisPipeline:
         logger.info("STEP 6: INSIGHTS & REPORTING")
         logger.info("=" * 80)
         
+        ea = event_analysis if event_analysis is not None else self.event_analysis
+        mc = model_comparison if model_comparison is not None else self.model_comparison
+        
+        if mc is None and (self.data_dir / 'model_comparison.csv').exists():
+            mc = pd.read_csv(self.data_dir / 'model_comparison.csv')
+            
+        if ea is None or mc is None:
+            raise ValueError("Missing event_analysis or model_comparison for report generation.")
+        
         report = []
         report.append("\n" + "=" * 80)
         report.append("EARNINGS IMPACT ANALYSIS - FINAL REPORT")
@@ -274,35 +345,34 @@ class EarningsAnalysisPipeline:
         
         # Data Summary
         report.append("\n1. DATA SUMMARY")
-        report.append(f"   - Total Earnings Events Analyzed: {len(self.event_analysis)}")
-        report.append(f"   - Unique Stocks: {self.event_analysis['Ticker'].nunique()}")
-        report.append(f"   - Date Range: {self.event_analysis['EarningsDate'].min()} to {self.event_analysis['EarningsDate'].max()}")
+        report.append(f"   - Total Earnings Events Analyzed: {len(ea)}")
+        report.append(f"   - Unique Stocks: {ea['Ticker'].nunique()}")
+        report.append(f"   - Date Range: {ea['EarningsDate'].min()} to {ea['EarningsDate'].max()}")
         
         # Return Analysis
         report.append("\n2. RETURN ANALYSIS")
-        report.append(f"   - Avg Pre-Event Return: {self.event_analysis['PreEventReturn'].mean():.2f}%")
-        report.append(f"   - Avg Post-Event Return: {self.event_analysis['PostEventReturn'].mean():.2f}%")
-        report.append(f"   - Avg Cumulative Abnormal Return: {self.event_analysis['AbnormalReturnCAR'].mean():.2f}%")
+        report.append(f"   - Avg Pre-Event Return: {ea['PreEventReturn'].mean():.2f}%")
+        report.append(f"   - Avg Post-Event Return: {ea['PostEventReturn'].mean():.2f}%")
+        report.append(f"   - Avg Cumulative Abnormal Return: {ea['AbnormalReturnCAR'].mean():.2f}%")
         
         # Volatility Insights
         report.append("\n3. VOLATILITY INSIGHTS")
-        report.append(f"   - Avg Pre-Event Volatility: {self.event_analysis['PreEventVolatility'].mean():.2f}%")
-        report.append(f"   - Avg Post-Event Volatility: {self.event_analysis['PostEventVolatility'].mean():.2f}%")
-        report.append(f"   - Volatility Change: {(self.event_analysis['PostEventVolatility'].mean() - self.event_analysis['EstimationVolatility'].mean()):.2f}%")
+        report.append(f"   - Avg Pre-Event Volatility: {ea['PreEventVolatility'].mean():.2f}%")
+        report.append(f"   - Avg Post-Event Volatility: {ea['PostEventVolatility'].mean():.2f}%")
+        report.append(f"   - Volatility Change: {(ea['PostEventVolatility'].mean() - ea['EstimationVolatility'].mean()):.2f}%")
         
         # Volume Insights
         report.append("\n4. VOLUME INSIGHTS")
-        report.append(f"   - Avg Volume Spike Ratio: {self.event_analysis['VolumeSpikeRatio'].mean():.2f}x")
-        report.append(f"   - Events with Significant Volume Spike (>1.5x): {(self.event_analysis['VolumeSpikeRatio'] > 1.5).sum()}")
+        report.append(f"   - Avg Volume Spike Ratio: {ea['VolumeSpikeRatio'].mean():.2f}x")
+        report.append(f"   - Events with Significant Volume Spike (>1.5x): {(ea['VolumeSpikeRatio'] > 1.5).sum()}")
         
         # Earnings Surprise Correlation
-        correlation = self.event_analysis['SurprisePercentage'].corr(self.event_analysis['PostEventReturn'])
+        correlation = ea['SurprisePercentage'].corr(ea['PostEventReturn']) if len(ea) > 1 else 0.0
         report.append("\n5. EARNINGS SURPRISE CORRELATION")
         report.append(f"   - Correlation (Surprise vs Post-Event Return): {correlation:.3f}")
         
-        # Model Performance
-        model_comparison = pd.read_csv(self.data_dir / 'model_comparison.csv')
-        best_model = model_comparison.loc[model_comparison['F1-Score'].idxmax()]
+        # Model Performance (using in-memory comparison DataFrame)
+        best_model = mc.loc[mc['F1-Score'].idxmax()]
         report.append("\n6. MODEL PERFORMANCE")
         report.append(f"   - Best Model: {best_model['Model']}")
         report.append(f"   - Accuracy: {best_model['Accuracy']:.4f}")
@@ -312,9 +382,9 @@ class EarningsAnalysisPipeline:
         
         # Key Findings
         report.append("\n7. KEY FINDINGS")
-        pos_reactions = (self.event_analysis['PostEventReturn'] > 0).sum()
-        report.append(f"   - Positive post-event reactions: {pos_reactions} ({pos_reactions/len(self.event_analysis)*100:.1f}%)")
-        report.append(f"   - Average surprise magnitude: {self.event_analysis['SurprisePercentage'].abs().mean():.2f}%")
+        pos_reactions = (ea['PostEventReturn'] > 0).sum()
+        report.append(f"   - Positive post-event reactions: {pos_reactions} ({pos_reactions/len(ea)*100:.1f}%)")
+        report.append(f"   - Average surprise magnitude: {ea['SurprisePercentage'].abs().mean():.2f}%")
         
         # Recommendations
         report.append("\n8. RECOMMENDATIONS")
@@ -327,9 +397,13 @@ class EarningsAnalysisPipeline:
         
         report_text = "\n".join(report)
         
-        # Save report
-        with open(self.data_dir / 'final_report.txt', 'w') as f:
-            f.write(report_text)
+        if self.save_intermediate:
+            with open(self.data_dir / 'final_report.txt', 'w') as f:
+                f.write(report_text)
+        
+        logger.info(report_text)
+        
+        return report_text
         
         logger.info(report_text)
         
@@ -346,13 +420,13 @@ class EarningsAnalysisPipeline:
             logger.info("STARTING EARNINGS IMPACT ANALYSIS PIPELINE")
             logger.info(f"Analyzing: {', '.join(tickers)}")
             
-            # Execute all steps
-            self.step_1_collect_data(tickers)
-            self.step_2_event_analysis()
-            self.step_3_feature_engineering()
-            self.step_4_train_models()
-            self.step_5_visualizations()
-            self.step_6_insights_report()
+            # Execute all steps passing in-memory DataFrames
+            prices, earnings = self.step_1_collect_data(tickers)
+            event_analysis = self.step_2_event_analysis(prices, earnings)
+            features, labels = self.step_3_feature_engineering(event_analysis)
+            model_comparison = self.step_4_train_models(features, labels)
+            self.step_5_visualizations(event_analysis, model_comparison)
+            self.step_6_insights_report(event_analysis, model_comparison)
             
             logger.info("\n" + "=" * 80)
             logger.info("PIPELINE COMPLETED SUCCESSFULLY")
