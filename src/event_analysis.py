@@ -5,7 +5,7 @@ Computes returns, abnormal returns, and volatility around earnings events
 
 import pandas as pd
 import numpy as np
-from typing import Tuple, Dict, List
+from typing import Tuple, Dict, List, Optional
 import logging
 
 logging.basicConfig(level=logging.INFO)
@@ -102,7 +102,7 @@ class EventAnalyzer:
         price_data: pd.DataFrame,
         earnings_date: pd.Timestamp,
         ticker: str
-    ) -> Dict:
+    ) -> Optional[Dict]:
         """
         Comprehensive analysis of stock around earnings event
         

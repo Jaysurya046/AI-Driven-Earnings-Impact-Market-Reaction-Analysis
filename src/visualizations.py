@@ -7,7 +7,7 @@ import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
 import seaborn as sns
-from typing import Dict, List
+from typing import Dict, List, Optional
 import logging
 
 logging.basicConfig(level=logging.INFO)
@@ -25,7 +25,7 @@ class Visualizer:
     def plot_event_window(
         event_analysis_df: pd.DataFrame,
         ticker: str,
-        save_path: str = None
+        save_path: Optional[str] = None
     ) -> None:
         """
         Plot post-event returns for a single stock
@@ -72,7 +72,7 @@ class Visualizer:
     @staticmethod
     def plot_surprise_vs_reaction(
         event_analysis_df: pd.DataFrame,
-        save_path: str = None
+        save_path: Optional[str] = None
     ) -> None:
         """
         Scatter plot: Earnings Surprise vs Market Reaction
@@ -124,7 +124,7 @@ class Visualizer:
     @staticmethod
     def plot_model_comparison(
         model_comparison_df: pd.DataFrame,
-        save_path: str = None
+        save_path: Optional[str] = None
     ) -> None:
         """
         Bar plot comparing model performance
@@ -168,7 +168,7 @@ class Visualizer:
     def plot_feature_importance(
         importance_df: pd.DataFrame,
         top_n: int = 15,
-        save_path: str = None
+        save_path: Optional[str] = None
     ) -> None:
         """
         Bar plot of top feature importances
@@ -200,7 +200,7 @@ class Visualizer:
     @staticmethod
     def plot_volatility_analysis(
         event_analysis_df: pd.DataFrame,
-        save_path: str = None
+        save_path: Optional[str] = None
     ) -> None:
         """
         Volatility before, during, and after earnings
@@ -237,7 +237,7 @@ class Visualizer:
     @staticmethod
     def plot_volume_analysis(
         event_analysis_df: pd.DataFrame,
-        save_path: str = None
+        save_path: Optional[str] = None
     ) -> None:
         """
         Volume before and after earnings
@@ -273,7 +273,7 @@ class Visualizer:
     def plot_confusion_matrix(
         confusion_matrix_array: np.ndarray,
         model_name: str = "Model",
-        save_path: str = None
+        save_path: Optional[str] = None
     ) -> None:
         """
         Plot confusion matrix heatmap

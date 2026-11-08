@@ -41,8 +41,10 @@ DEFAULT_CONFIG: Dict[str, Any] = {
 }
 
 
-def _parse_list(val: str) -> List[str]:
+def _parse_list(val: Optional[str]) -> List[str]:
     """Parse comma-separated string into list of stripped strings."""
+    if not val:
+        return []
     return [item.strip() for item in val.split(',') if item.strip()]
 
 
@@ -171,9 +173,11 @@ def load_config(
         if parser.has_section('VISUALIZATION'):
             sec = parser['VISUALIZATION']
             if 'figure_size' in sec:
-                dims = [int(x.strip()) for x in sec.get('figure_size').split(',')]
-                if len(dims) == 2:
-                    cfg['figure_size'] = tuple(dims)
+                fig_val = sec.get('figure_size')
+                if fig_val:
+                    dims = [int(x.strip()) for x in fig_val.split(',')]
+                    if len(dims) == 2:
+                        cfg['figure_size'] = tuple(dims)
             if 'dpi' in sec:
                 cfg['dpi'] = sec.getint('dpi')
             if 'color_scheme' in sec:

@@ -117,7 +117,7 @@ class LSTMPredictor:
         logger.info(f"LSTM model built with input shape: {input_shape}")
     
     def train(self, X_train: np.ndarray, y_train: np.ndarray,
-              X_val: np.ndarray = None, y_val: np.ndarray = None,
+              X_val: Optional[np.ndarray] = None, y_val: Optional[np.ndarray] = None,
               epochs: int = 50, batch_size: int = 32,
               early_stopping_patience: int = 10) -> Dict:
         """
@@ -198,7 +198,7 @@ class LSTMPredictor:
         
         return self.history
     
-    def predict(self, X: np.ndarray) -> np.ndarray:
+    def predict(self, X: np.ndarray) -> Optional[np.ndarray]:
         """
         Make predictions with trained model
         
@@ -226,7 +226,7 @@ class LSTMPredictor:
         
         return predictions.flatten()
     
-    def predict_proba(self, X: np.ndarray) -> np.ndarray:
+    def predict_proba(self, X: np.ndarray) -> Optional[np.ndarray]:
         """
         Get prediction probabilities
         
@@ -253,6 +253,8 @@ class LSTMPredictor:
                                    f1_score, roc_auc_score, confusion_matrix
         
         predictions = self.predict(X_test)
+        if predictions is None:
+            return {}
         
         # Convert probabilities to binary predictions
         y_pred = (predictions > 0.5).astype(int)
@@ -400,7 +402,7 @@ class HybridEnsemblePredictor:
         
         return results
     
-    def predict(self, X: np.ndarray) -> np.ndarray:
+    def predict(self, X: np.ndarray) -> Optional[np.ndarray]:
         """
         Make ensemble predictions
         

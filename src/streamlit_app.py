@@ -148,7 +148,7 @@ def sidebar_configuration():
     }
 
 
-def run_analysis(config: Dict) -> Dict:
+def run_analysis(config: Dict) -> Optional[Dict]:
     """Run the complete analysis pipeline"""
     progress_bar = st.progress(0)
     status_text = st.empty()

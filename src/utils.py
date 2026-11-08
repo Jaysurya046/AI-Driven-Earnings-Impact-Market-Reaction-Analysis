@@ -7,6 +7,7 @@ import pandas as pd
 import numpy as np
 from datetime import datetime, timedelta
 import logging
+from typing import Any, Dict, List, Optional
 
 logger = logging.getLogger(__name__)
 
@@ -72,7 +73,7 @@ def normalize_features(X: np.ndarray) -> np.ndarray:
 def handle_missing_values(
     df: pd.DataFrame,
     strategy: str = 'forward_fill',
-    numeric_columns: list = None
+    numeric_columns: Optional[List[str]] = None
 ) -> pd.DataFrame:
     """
     Handle missing values in DataFrame
@@ -140,7 +141,7 @@ def detect_outliers(
 def create_performance_report(
     actual: np.ndarray,
     predicted: np.ndarray,
-    probabilities: np.ndarray = None
+    probabilities: Optional[np.ndarray] = None
 ) -> dict:
     """
     Create comprehensive performance report
