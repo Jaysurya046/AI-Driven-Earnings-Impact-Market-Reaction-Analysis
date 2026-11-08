@@ -71,3 +71,4 @@ def test_sensitive_keys_masked_in_repr():
     rep = repr(cfg)
     assert 'super-secret-token' not in rep
     assert '***' in rep
+

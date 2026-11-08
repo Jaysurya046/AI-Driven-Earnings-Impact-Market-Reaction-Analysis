@@ -65,3 +65,4 @@ def test_calibrate_probabilities_and_predict():
     df_test = pd.DataFrame(X_test, columns=['f1', 'f2', 'f3'])
     probs_df = trainer.predict_proba_calibrated('Random Forest', df_test)
     assert np.allclose(probs_arr, probs_df)
+

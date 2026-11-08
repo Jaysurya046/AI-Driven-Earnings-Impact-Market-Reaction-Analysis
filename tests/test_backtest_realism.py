@@ -84,3 +84,4 @@ def test_mean_reversion_strategy_with_costs(sample_events):
     assert res['total_slippage_cost'] > 0
     assert res['total_commission_cost'] > 0
     assert len(res['trades']) == 2
+

@@ -59,3 +59,4 @@ def test_expanded_universe_tickers():
     assert 'AAPL' in tickers
     assert 'UNH' in tickers
     assert 'XOM' in tickers
+

@@ -67,3 +67,4 @@ def test_predict_missing_feature_raises_error(tmp_path):
     df_missing = pd.DataFrame({'col1': [1.0, 2.0]})
     with pytest.raises(ValueError, match="missing required features"):
         trainer.predict('RF', df_missing)
+

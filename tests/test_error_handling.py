@@ -55,3 +55,4 @@ def test_performance_report_handles_invalid_auc_gracefully():
     assert report['accuracy'] == 1.0
     # auc_roc should be omitted or handled cleanly without raising an unhandled exception
     assert 'auc_roc' not in report or report['auc_roc'] is not None
+

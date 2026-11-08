@@ -88,3 +88,4 @@ def test_secret_masking_in_repr_and_helper():
     assert "very-secret-token" not in repr_str
     assert "super-sensitive-pass" not in repr_str
     assert "***" in repr_str
+

@@ -46,3 +46,4 @@ def test_detect_outliers():
     outliers = detect_outliers(df, columns=['val'], method='iqr')
     assert outliers.iloc[-1] is True or outliers.iloc[-1] == True
     assert outliers.iloc[0] is False or outliers.iloc[0] == False
+

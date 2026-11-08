@@ -38,3 +38,4 @@ def test_create_features_backward_compatibility(event_analysis_df):
     assert 'feature_columns' in features.attrs
     cols = FeatureEngineer.get_feature_columns(features)
     assert set(cols) == set(features.attrs['feature_columns'])
+

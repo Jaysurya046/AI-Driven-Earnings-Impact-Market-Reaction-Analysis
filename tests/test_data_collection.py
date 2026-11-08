@@ -99,3 +99,4 @@ def test_clean_earnings_dataframe_filters_future_and_nan_dates():
     assert 'Surprise_Percentage' in cleaned.columns
     assert 'EPS' in cleaned.columns
     assert 'Ticker' in cleaned.columns
+
