@@ -4,8 +4,8 @@ A quantitative, production-grade system that analyzes equity price behavior arou
 
 [![CI](https://github.com/Jaysurya046/ai-earnings-impact-analysis/actions/workflows/ci.yml/badge.svg)](https://github.com/Jaysurya046/ai-earnings-impact-analysis/actions/workflows/ci.yml)
 [![Python Version](https://img.shields.io/badge/python-3.9%20%7C%203.10%20%7C%203.11%20%7C%203.12%20%7C%203.13-blue)](pyproject.toml)
-[![Tests](https://img.shields.io/badge/tests-68%20passed-brightgreen)](tests/)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](pyproject.toml)
+[![Tests](https://img.shields.io/badge/tests-69%20passed-brightgreen)](tests/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
 ---
 
@@ -249,4 +249,4 @@ python -m pytest -v --tb=short
 
 ## License
 
-This project is licensed under the MIT License - see [`pyproject.toml`](pyproject.toml) for details.
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.

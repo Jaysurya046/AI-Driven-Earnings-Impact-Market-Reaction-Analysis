@@ -64,3 +64,16 @@ def test_documentation_leakage_free():
     arch_text = arch_path.read_text(encoding="utf-8")
     for prohibited in prohibited_features:
         assert prohibited not in arch_text, f"ARCHITECTURE.md contains leaky feature reference: {prohibited}"
+
+
+def test_mit_license_exists_and_valid():
+    """Verify that a proper MIT License file exists in the repo root"""
+    license_path = REPO_ROOT / "LICENSE"
+    assert license_path.exists(), "LICENSE file must exist in repo root"
+
+    license_text = license_path.read_text(encoding="utf-8")
+    assert "MIT License" in license_text
+    assert "Copyright (c)" in license_text
+    assert "Permission is hereby granted, free of charge" in license_text
+    assert "FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT" in license_text
+

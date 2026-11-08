@@ -58,6 +58,7 @@ AI-Driven Earnings Impact & Market Reaction Analysis/
 │   └── quick_start.py                     - Rapid 5-stock demonstration script
 │
 ├── [BUILD & CONFIGURATION]
+│   ├── LICENSE                            - Standard MIT open-source license agreement
 │   ├── pyproject.toml                     - PEP 517/PEP 621 packaging, setuptools discovery & test config
 │   ├── config.ini                         - Default baseline configuration settings
 │   ├── .env.example                       - Environment configuration & secrets template
