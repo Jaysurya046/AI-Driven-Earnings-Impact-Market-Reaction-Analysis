@@ -2,7 +2,7 @@
 
 A quantitative, production-grade system that analyzes equity price behavior around quarterly corporate earnings announcements and leverages machine learning to predict post-earnings market reactions.
 
-[![CI](https://github.com/Jaysurya046/ai-earnings-impact-analysis/actions/workflows/ci.yml/badge.svg)](https://github.com/Jaysurya046/ai-earnings-impact-analysis/actions/workflows/ci.yml)
+[![CI](https://github.com/Jaysurya046/Earnings-Impact-Market-Reaction-Analysis/actions/workflows/ci.yml/badge.svg)](https://github.com/Jaysurya046/Earnings-Impact-Market-Reaction-Analysis/actions/workflows/ci.yml)
 [![Python Version](https://img.shields.io/badge/python-3.9%20%7C%203.10%20%7C%203.11%20%7C%203.12%20%7C%203.13-blue)](pyproject.toml)
 [![Tests](https://img.shields.io/badge/tests-86%20passed-brightgreen)](tests/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
@@ -68,8 +68,8 @@ A quantitative, production-grade system that analyzes equity price behavior arou
 
 ### 1. Clone & Set Up Environment
 ```bash
-git clone https://github.com/Jaysurya046/ai-earnings-impact-analysis.git
-cd "ai-earnings-impact-analysis"
+git clone https://github.com/Jaysurya046/Earnings-Impact-Market-Reaction-Analysis.git
+cd Earnings-Impact-Market-Reaction-Analysis
 
 # Create and activate virtual environment
 python -m venv venv
