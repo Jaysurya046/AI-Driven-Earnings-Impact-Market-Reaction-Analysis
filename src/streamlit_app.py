@@ -258,17 +258,36 @@ def display_overview_dashboard(results: Dict):
     col1, col2 = st.columns(2)
     
     with col1:
-        # Earnings Surprise vs Market Reaction
-        fig_scatter = px.scatter(
-            event_analysis,
-            x='SurprisePercentage',
-            y='PostEventReturn',
-            color='Ticker',
-            title='Earnings Surprise vs Market Reaction',
-            labels={'SurprisePercentage': 'EPS Surprise (%)', 'PostEventReturn': 'Post-Event Return (%)'},
-            hover_data=['Ticker', 'EarningsDate'],
-            trendline='ols'
-        )
+        # Check if statsmodels is available for OLS trendline
+        try:
+            import statsmodels.api  # noqa: F401
+            has_statsmodels = True
+        except ImportError:
+            has_statsmodels = False
+
+        scatter_kwargs = {
+            'x': 'SurprisePercentage',
+            'y': 'PostEventReturn',
+            'color': 'Ticker',
+            'title': 'Earnings Surprise vs Market Reaction',
+            'labels': {'SurprisePercentage': 'EPS Surprise (%)', 'PostEventReturn': 'Post-Event Return (%)'},
+            'hover_data': ['Ticker', 'EarningsDate'],
+        }
+        if has_statsmodels:
+            scatter_kwargs['trendline'] = 'ols'
+
+        # Earnings Surprise vs Market Reaction (with fallback if OLS fitting fails)
+        try:
+            fig_scatter = px.scatter(
+                event_analysis,
+                **scatter_kwargs
+            )
+        except Exception:
+            scatter_kwargs.pop('trendline', None)
+            fig_scatter = px.scatter(
+                event_analysis,
+                **scatter_kwargs
+            )
         st.plotly_chart(fig_scatter, use_container_width=True)
     
     with col2:
@@ -363,13 +382,16 @@ def display_model_performance(results: Dict):
             model = trained_models.models[best_model_name]
             
             if hasattr(model, 'feature_importances_'):
+                importances = model.feature_importances_
                 feature_cols = [col for col in results['features'].columns if col not in 
                                ['Ticker', 'EarningsDate', 'PostEventReturn', 'PreEventReturn', 
                                 'EPS', 'SurprisePercentage', 'DataPointsInWindow', 'DataPointsInEstimation']]
+                if len(feature_cols) != len(importances):
+                    feature_cols = [f"Feature_{i}" for i in range(len(importances))]
                 
                 importance_df = pd.DataFrame({
                     'Feature': feature_cols,
-                    'Importance': model.feature_importances_
+                    'Importance': importances
                 }).sort_values('Importance', ascending=True)
                 
                 fig_importance = px.bar(
@@ -397,26 +419,30 @@ def display_sector_analysis(results: Dict):
     
     with col1:
         # Average returns by sector
+        returns_df = sector_results['sector_returns']
+        ret_col = 'AvgReturn' if 'AvgReturn' in returns_df.columns else returns_df.columns[1]
         fig_sector_returns = px.bar(
-            sector_results['sector_returns'],
+            returns_df,
             x='Sector',
-            y='AvgReturn',
+            y=ret_col,
             title='Average Post-Event Return by Sector',
-            labels={'AvgReturn': 'Return (%)', 'Sector': ''},
-            color='AvgReturn',
+            labels={ret_col: 'Return (%)', 'Sector': ''},
+            color=ret_col,
             color_continuous_scale='RdYlGn'
         )
         st.plotly_chart(fig_sector_returns, use_container_width=True)
     
     with col2:
         # Sector volatility
+        vol_df = sector_results['sector_volatility']
+        vol_col = 'AvgVolatility' if 'AvgVolatility' in vol_df.columns else ('AvgPostVol' if 'AvgPostVol' in vol_df.columns else vol_df.columns[1])
         fig_sector_vol = px.bar(
-            sector_results['sector_volatility'],
+            vol_df,
             x='Sector',
-            y='AvgVolatility',
+            y=vol_col,
             title='Average Volatility by Sector',
-            labels={'AvgVolatility': 'Volatility (%)', 'Sector': ''},
-            color='AvgVolatility',
+            labels={vol_col: 'Volatility (%)', 'Sector': ''},
+            color=vol_col,
             color_continuous_scale='YlOrRd'
         )
         st.plotly_chart(fig_sector_vol, use_container_width=True)
@@ -441,7 +467,12 @@ def display_backtesting(results: Dict):
     col1, col2, col3, col4 = st.columns(4)
     
     with col1:
-        total_return = backtest['portfolio_value'][-1] / backtest['initial_capital'] - 1
+        if 'total_return' in backtest:
+            total_return = backtest['total_return']
+        elif len(backtest.get('portfolio_value', [])) > 0:
+            total_return = backtest['portfolio_value'][-1] / backtest['initial_capital'] - 1
+        else:
+            total_return = 0.0
         st.metric("Total Return", f"{total_return:.2%}")
     
     with col2:

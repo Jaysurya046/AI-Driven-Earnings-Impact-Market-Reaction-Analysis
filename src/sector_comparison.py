@@ -206,7 +206,9 @@ class SectorAnalyzer:
         
         # Prepare visualization data
         sector_returns = sector_summary[['Sector', 'AvgReturn']].sort_values('AvgReturn', ascending=False)
-        sector_volatility = sector_summary[['Sector', 'AvgPostVol']].sort_values('AvgPostVol', ascending=False)
+        sector_volatility = sector_summary[['Sector', 'AvgPostVol']].copy()
+        sector_volatility['AvgVolatility'] = sector_volatility['AvgPostVol']
+        sector_volatility = sector_volatility.sort_values('AvgVolatility', ascending=False)
         
         results = {
             'sector_summary': sector_summary,
