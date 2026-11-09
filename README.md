@@ -63,10 +63,12 @@ A quantitative, production-grade system that analyzes equity price behavior arou
 ## Installation & Setup
 
 ### Prerequisites
+
 - Python 3.9+ (Python 3.10–3.13 recommended)
 - Git & pip
 
 ### 1. Clone & Set Up Environment
+
 ```bash
 git clone https://github.com/Jaysurya046/Earnings-Impact-Market-Reaction-Analysis.git
 cd Earnings-Impact-Market-Reaction-Analysis
@@ -82,6 +84,7 @@ source venv/bin/activate
 ```
 
 ### 2. Install Dependencies
+
 ```bash
 # Production install
 pip install -r requirements.txt
@@ -91,16 +94,20 @@ pip install -e ".[dev]"
 ```
 
 ### 3. Environment Secrets Configuration
+
 ```bash
 # Copy secrets template to active .env
 cp .env.example .env
 ```
+
 Edit `.env` to specify your `API_SECRET_KEY`, preferred port, or custom ticker list.
 
 ### 4. Run Test Suite
+
 ```bash
 python -m pytest
 ```
+
 All 68 tests across data collection, event analysis, feature isolation, ML training, backtesting, and API concurrency will run.
 
 ---
@@ -108,12 +115,16 @@ All 68 tests across data collection, event analysis, feature isolation, ML train
 ## Running the Platform
 
 ### 1. End-to-End Analysis Pipeline (CLI)
+
 Run the full in-memory quantitative pipeline:
+
 ```bash
 # Run with defaults or config.ini overrides
 python main.py
 ```
+
 To run a fast programmatic trial on selected equities:
+
 ```python
 from src.config import load_config
 from main import EarningsAnalysisPipeline
@@ -129,27 +140,35 @@ comparison = pipeline.step_4_train_models(features_df, labels)
 ```
 
 ### 2. Interactive Streamlit Dashboard
+
 Launch the multi-tab exploratory research dashboard:
+
 ```bash
 streamlit run src/streamlit_app.py
 ```
+
 Features:
+
 - **Overview Dashboard**: Surprise distribution vs CAR reactions and cumulative returns.
 - **ML Performance**: Accuracy, F1, ROC-AUC comparisons and feature importance rankings.
 - **Sector Comparison**: Sector-by-sector reaction heatmaps and t-test statistics.
 - **Backtesting**: Portfolio equity curves under realistic commission & slippage friction.
 
 ### 3. REST API Server (FastAPI)
+
 Start the high-throughput, thread-safe asynchronous prediction server:
+
 ```bash
 uvicorn api_server:app --host 0.0.0.0 --port 8000 --workers 1
 ```
+
 Interactive OpenAPI documentation will be accessible at `http://localhost:8000/docs`.
 
 > [!NOTE]
 > **Single-Worker Execution (`--workers 1`)**: The FastAPI server relies on an in-memory `AnalysisStateManager` with `asyncio.Lock` for atomic task management and global state synchronization. Running multi-process workers (`--workers > 1` or `WEB_CONCURRENCY > 1`) is actively detected and blocked via runtime guard (`enforce_single_worker_environment()`) to guarantee state consistency across all requests.
 
 Key Endpoints:
+
 - `GET /health`: Service health and model status
 - `POST /analyze`: Asynchronous background pipeline execution
 - `POST /predict`: Real-time post-earnings movement probability prediction
@@ -161,6 +180,7 @@ Key Endpoints:
 ## Core Modules & API Reference
 
 ### Data Collection (`src.data_collection`)
+
 ```python
 from src import DataCollector
 
@@ -170,6 +190,7 @@ DataCollector.validate_collected_data(price_df, earnings_df)
 ```
 
 ### Event Study Analysis (`src.event_analysis`)
+
 ```python
 from src import EventAnalyzer
 
@@ -179,6 +200,7 @@ analysis_df = analyzer.analyze_multiple_events(price_df, earnings_df)
 ```
 
 ### Feature Engineering (`src.feature_engineering`)
+
 ```python
 from src import FeatureEngineer, SAFE_FEATURE_COLUMNS
 
@@ -194,6 +216,7 @@ X_train, X_test, y_train, y_test, cols = engineer.prepare_train_test_data(
 ```
 
 ### Machine Learning (`src.ml_models`)
+
 ```python
 from src import ModelTrainer
 
@@ -209,6 +232,7 @@ trainer.save_model('xgboost', 'models/xgboost.pkl', feature_columns=cols)
 ```
 
 ### Realistic Backtesting (`src.backtesting`)
+
 ```python
 from src import Backtester
 
@@ -227,6 +251,7 @@ print(f"Sharpe Ratio: {results['sharpe_ratio']:.2f}, Max Drawdown: {results['max
 ## Verification & Testing
 
 The project maintains 100% test pass rate across 15 automated test suites:
+
 - `test_feature_leakage.py`: Proves post-event returns are never used as model inputs.
 - `test_event_analysis.py`: Verifies trading-day indexing and CAR event window summation.
 - `test_data_collection.py`: Checks MultiIndex flattening, future date filters, and retry logic.
@@ -244,6 +269,7 @@ The project maintains 100% test pass rate across 15 automated test suites:
 - `test_secrets_management.py`: Verifies `.env` loading, secret masking, and `.gitignore` rules.
 
 To execute tests:
+
 ```bash
 python -m pytest -v --tb=short
 ```
@@ -279,7 +305,3 @@ An extensive empirical grid search and parameter sweep was conducted on **Novemb
 > **Key Takeaway**: Shorter event windows (2–3 days) cut off post-earnings announcement drift (PEAD) prematurely, while longer estimation windows (>90 days) risk incorporating obsolete market regimes. The parameter baseline of **`event_window = 5`**, **`estimation_window = 60`**, and **`label_threshold = 0.0%`** achieved the superior combination of statistical predictive power and net risk-adjusted returns.
 
 ---
-
-## License
-
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
