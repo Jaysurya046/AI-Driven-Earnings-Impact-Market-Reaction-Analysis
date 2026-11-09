@@ -3,7 +3,7 @@
 ## Complete Project File Structure
 
 ```
-AI-Driven Earnings Impact & Market Reaction Analysis/
+Earnings Impact & Market Reaction Analysis/
 │
 ├── .github/workflows/
 │   └── ci.yml                             - GitHub Actions matrix CI/CD workflow (Python 3.10-3.13)

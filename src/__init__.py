@@ -1,5 +1,5 @@
 """
-AI-Driven Earnings Impact & Market Reaction Analysis
+Earnings Impact & Market Reaction Analysis
 Package initialization exposing primary analysis and modeling classes.
 """
 

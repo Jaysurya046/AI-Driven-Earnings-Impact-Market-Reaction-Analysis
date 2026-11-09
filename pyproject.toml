@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "earnings-impact-analysis"
 version = "1.0.0"
-description = "AI-Driven Earnings Impact & Market Reaction Analysis System"
+description = "Earnings Impact & Market Reaction Analysis System"
 readme = "README.md"
 requires-python = ">=3.9"
 license = {text = "MIT"}

@@ -1,4 +1,4 @@
-# Locked production dependencies for AI-Driven Earnings Impact & Market Reaction Analysis
+# Locked production dependencies for Earnings Impact & Market Reaction Analysis
 # Generated for reproducible builds across environments
 pandas==2.2.3
 numpy==1.26.4

@@ -1,4 +1,4 @@
-# AI-Driven Earnings Impact & Market Reaction Analysis
+# Earnings Impact & Market Reaction Analysis
 
 A quantitative, production-grade system that analyzes equity price behavior around quarterly corporate earnings announcements and leverages machine learning to predict post-earnings market reactions.
 
